@@ -1,0 +1,568 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>The Gap — job matches with honest scoring</title>
+<meta name="description" content="Search live job postings, score them against your actual CV, and see exactly what you're missing.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600&family=Instrument+Serif:ital@0;1&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --paper: #EDEFF2;
+    --panel: #F8F9FB;
+    --ink: #151A24;
+    --ink-soft: #5A6274;
+    --ink-faint: #8F97A6;
+    --rule: #D3D8E0;
+    --rule-soft: #E2E6EC;
+    --mark: #2D3BAF;
+    --strong: #1F7A56;
+    --mid: #B07A18;
+    --weak: #A8412F;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    background: var(--paper);
+    color: var(--ink);
+    font-family: 'Instrument Sans', system-ui, sans-serif;
+    font-size: 16px;
+    line-height: 1.55;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .wrap { max-width: 680px; margin: 0 auto; padding: 72px 24px 96px; }
+
+  /* ---- hero ---- */
+  h1 {
+    font-family: 'Instrument Serif', Georgia, serif;
+    font-weight: 400;
+    font-size: clamp(42px, 8vw, 68px);
+    line-height: 1.0;
+    letter-spacing: -0.015em;
+    margin: 0 0 20px;
+  }
+  h1 em { font-style: italic; }
+
+  .lede {
+    color: var(--ink-soft);
+    font-size: 17px;
+    max-width: 50ch;
+    margin: 0 0 12px;
+  }
+
+  .caveat { color: var(--ink-faint); font-size: 14px; margin: 0 0 44px; max-width: 50ch; }
+
+  /* ---- form ---- */
+  form { margin-bottom: 40px; }
+
+  fieldset { border: 0; padding: 0; margin: 0 0 26px; }
+
+  legend, .lbl {
+    font-size: 13px;
+    color: var(--ink-soft);
+    font-weight: 500;
+    padding: 0;
+    margin-bottom: 10px;
+    display: block;
+  }
+
+  .chips { display: flex; flex-wrap: wrap; gap: 7px; }
+
+  .chip {
+    font: inherit;
+    font-size: 14px;
+    color: var(--ink-soft);
+    background: var(--panel);
+    border: 1px solid var(--rule);
+    border-radius: 100px;
+    padding: 6px 14px;
+    cursor: pointer;
+  }
+  .chip:hover { border-color: var(--ink-faint); color: var(--ink); }
+  .chip[aria-pressed="true"] {
+    background: var(--ink);
+    border-color: var(--ink);
+    color: var(--panel);
+  }
+
+  input[type="text"] {
+    width: 100%;
+    font: inherit;
+    font-size: 17px;
+    color: var(--ink);
+    background: var(--panel);
+    border: 1px solid var(--rule);
+    border-radius: 3px;
+    padding: 11px 13px;
+  }
+  input::placeholder { color: var(--ink-faint); }
+  input:focus-visible, button:focus-visible, .drop:focus-visible {
+    outline: 2px solid var(--mark);
+    outline-offset: 2px;
+  }
+
+  .pair { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+  @media (max-width: 560px) { .pair { grid-template-columns: 1fr; gap: 26px; } }
+
+  select {
+    width: 100%;
+    font: inherit;
+    font-size: 16px;
+    color: var(--ink);
+    background: var(--panel);
+    border: 1px solid var(--rule);
+    border-radius: 3px;
+    padding: 11px 13px;
+    cursor: pointer;
+  }
+  select:focus-visible { outline: 2px solid var(--mark); outline-offset: 2px; }
+
+  .toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 9px;
+    cursor: pointer;
+    font-size: 15px;
+    color: var(--ink-soft);
+    user-select: none;
+  }
+  .toggle input { width: 17px; height: 17px; accent-color: var(--mark); cursor: pointer; margin: 0; }
+  .toggle:hover { color: var(--ink); }
+
+  .hint { font-size: 13px; color: var(--ink-faint); margin: 7px 0 0; }
+
+  /* ---- cv drop ---- */
+  .drop {
+    border: 1.5px dashed var(--rule);
+    border-radius: 4px;
+    background: transparent;
+    padding: 18px;
+    text-align: left;
+    width: 100%;
+    font: inherit;
+    color: var(--ink-soft);
+    cursor: pointer;
+    display: block;
+  }
+  .drop:hover { border-color: var(--mark); color: var(--ink); }
+  .drop strong { color: var(--ink); font-weight: 600; display: block; font-size: 15px; }
+  .drop span { font-size: 13.5px; }
+  .drop.loaded { border-style: solid; border-color: var(--strong); }
+  .drop.loaded strong { color: var(--strong); }
+
+  /* ---- submit ---- */
+  .go {
+    font: inherit;
+    font-weight: 600;
+    font-size: 16px;
+    background: var(--ink);
+    color: var(--panel);
+    border: 0;
+    border-radius: 3px;
+    padding: 13px 30px;
+    cursor: pointer;
+  }
+  .go:hover { background: var(--mark); }
+  .go[disabled] { background: var(--rule); color: var(--ink-faint); cursor: progress; }
+
+  /* ---- status ---- */
+  .status { font-size: 14px; color: var(--ink-soft); min-height: 20px; margin-bottom: 8px; }
+  .status.bad { color: var(--weak); }
+
+  /* ---- results ---- */
+  .meta {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: 16px;
+    padding-bottom: 10px;
+    border-bottom: 2px solid var(--ink);
+    margin-bottom: 4px;
+    flex-wrap: wrap;
+  }
+  .meta h2 {
+    font-family: 'Instrument Serif', Georgia, serif;
+    font-weight: 400;
+    font-size: 26px;
+    margin: 0;
+  }
+  .meta a { color: var(--mark); font-size: 14px; }
+
+  .hidden-note { font-size: 13.5px; color: var(--ink-faint); margin: 10px 0 0; }
+
+  .job {
+    padding: 24px 0;
+    border-bottom: 1px solid var(--rule-soft);
+  }
+
+  .job-head { display: flex; justify-content: space-between; gap: 20px; align-items: flex-start; }
+
+  .job h3 {
+    font-family: 'Instrument Serif', Georgia, serif;
+    font-weight: 400;
+    font-size: 23px;
+    line-height: 1.2;
+    margin: 0 0 3px;
+  }
+  .co { font-size: 14.5px; color: var(--ink-soft); }
+
+  /* score block */
+  .score { text-align: right; flex-shrink: 0; min-width: 78px; }
+  .score b {
+    font-family: 'Instrument Serif', Georgia, serif;
+    font-weight: 400;
+    font-size: 38px;
+    line-height: 1;
+    font-variant-numeric: tabular-nums;
+    display: block;
+  }
+  .score i { font-style: normal; font-size: 12px; color: var(--ink-faint); }
+  .bar { height: 3px; background: var(--rule); margin-top: 7px; width: 78px; }
+  .bar > span { display: block; height: 100%; }
+  .s-hi b { color: var(--strong); } .s-hi .bar > span { background: var(--strong); }
+  .s-mid b { color: var(--mid); }   .s-mid .bar > span { background: var(--mid); }
+  .s-lo b { color: var(--weak); }   .s-lo .bar > span { background: var(--weak); }
+
+  .why { font-size: 15px; color: var(--ink-soft); margin: 12px 0 0; max-width: 60ch; }
+
+  .gaps { margin-top: 14px; }
+  .gaps p { font-size: 13px; color: var(--ink-faint); margin: 0 0 7px; }
+  .gap {
+    display: inline-block;
+    font-size: 13.5px;
+    color: var(--weak);
+    border: 1.5px dashed var(--weak);
+    border-radius: 3px;
+    padding: 3px 10px;
+    margin: 0 6px 6px 0;
+  }
+
+  .job-links { margin-top: 15px; display: flex; gap: 18px; flex-wrap: wrap; }
+  .job-links a { color: var(--mark); font-size: 14.5px; font-weight: 500; }
+
+  a { text-decoration: none; }
+  a:hover { text-decoration: underline; }
+
+  .empty {
+    font-family: 'Instrument Serif', Georgia, serif;
+    font-size: 20px;
+    color: var(--ink-soft);
+    padding: 28px 0;
+  }
+
+  footer {
+    margin-top: 56px;
+    padding-top: 18px;
+    border-top: 1px solid var(--rule);
+    font-size: 13px;
+    color: var(--ink-faint);
+  }
+
+  /* one orchestrated reveal */
+  .job { opacity: 0; animation: in .45s cubic-bezier(.2,.7,.3,1) forwards; }
+  @keyframes in { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+  @media (prefers-reduced-motion: reduce) {
+    .job { animation: none; opacity: 1; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <h1>Every job tells you<br>what it wants.<br><em>None tell you what you're missing.</em></h1>
+  <p class="lede">Search live job postings, then score each one against your actual CV — with a specific list of what the role asks for that your CV doesn't show.</p>
+  <p class="caveat">Scores come from a language model reading your CV against each posting. Useful as direction, not as a verdict.</p>
+
+  <form id="f">
+    <fieldset>
+      <legend>Field</legend>
+      <div class="chips" id="cats">
+        <button type="button" class="chip" aria-pressed="false">Engineering</button>
+        <button type="button" class="chip" aria-pressed="false">Product</button>
+        <button type="button" class="chip" aria-pressed="false">Design</button>
+        <button type="button" class="chip" aria-pressed="false">Data &amp; AI</button>
+        <button type="button" class="chip" aria-pressed="false">Cloud &amp; DevOps</button>
+        <button type="button" class="chip" aria-pressed="false">Marketing</button>
+        <button type="button" class="chip" aria-pressed="false">Sales</button>
+        <button type="button" class="chip" aria-pressed="false">Finance</button>
+      </div>
+    </fieldset>
+
+    <fieldset>
+      <label class="lbl" for="role">Role or keywords</label>
+      <input type="text" id="role" placeholder="Senior cloud engineer">
+    </fieldset>
+
+    <fieldset class="pair">
+      <div>
+        <label class="lbl" for="country">Country</label>
+        <select id="country">
+          <option value="us" data-name="United States">United States</option>
+          <option value="gb" data-name="United Kingdom">United Kingdom</option>
+          <option value="fr" data-name="France">France</option>
+          <option value="de" data-name="Germany">Germany</option>
+          <option value="es" data-name="Spain">Spain</option>
+          <option value="it" data-name="Italy">Italy</option>
+          <option value="nl" data-name="Netherlands">Netherlands</option>
+          <option value="be" data-name="Belgium">Belgium</option>
+          <option value="ch" data-name="Switzerland">Switzerland</option>
+          <option value="ie" data-name="Ireland">Ireland</option>
+          <option value="pt" data-name="Portugal">Portugal</option>
+          <option value="ca" data-name="Canada">Canada</option>
+          <option value="au" data-name="Australia">Australia</option>
+          <option value="ae" data-name="United Arab Emirates">United Arab Emirates</option>
+          <option value="sa" data-name="Saudi Arabia">Saudi Arabia</option>
+          <option value="qa" data-name="Qatar">Qatar</option>
+          <option value="tn" data-name="Tunisia">Tunisia</option>
+          <option value="ma" data-name="Morocco">Morocco</option>
+          <option value="eg" data-name="Egypt">Egypt</option>
+          <option value="in" data-name="India">India</option>
+        </select>
+      </div>
+      <div>
+        <label class="lbl" for="city">City or region <span style="color:var(--ink-faint)">(optional)</span></label>
+        <input type="text" id="city" placeholder="Paris">
+      </div>
+    </fieldset>
+
+    <fieldset class="pair">
+      <div>
+        <label class="lbl" for="posted">Posted within</label>
+        <select id="posted">
+          <option value="month" selected>Past month</option>
+          <option value="week">Past week</option>
+          <option value="3days">Past 3 days</option>
+          <option value="today">Today</option>
+          <option value="all">Any time</option>
+        </select>
+      </div>
+      <div>
+        <label class="lbl" for="etype">Job type</label>
+        <select id="etype">
+          <option value="">Any</option>
+          <option value="FULLTIME">Full-time</option>
+          <option value="CONTRACTOR">Contract</option>
+          <option value="PARTTIME">Part-time</option>
+          <option value="INTERN">Internship</option>
+        </select>
+      </div>
+    </fieldset>
+
+    <fieldset>
+      <label class="toggle" for="remote">
+        <input type="checkbox" id="remote">
+        Remote roles only
+      </label>
+      <p class="hint">Overrides the city above and searches remote postings across the country.</p>
+    </fieldset>
+
+    <fieldset>
+      <label class="lbl" for="want">What matters to you</label>
+      <input type="text" id="want" placeholder="Early-stage, infra work, no on-call">
+    </fieldset>
+
+    <fieldset>
+      <span class="lbl">Your CV</span>
+      <button type="button" class="drop" id="drop">
+        <strong id="dropTitle">Add your CV to get fit scores</strong>
+        <span id="dropSub">PDF, read in your browser — never uploaded anywhere but the search itself.</span>
+      </button>
+      <input type="file" id="file" accept="application/pdf" hidden>
+    </fieldset>
+
+    <button type="submit" class="go" id="go">Find matches</button>
+  </form>
+
+  <p class="status" id="status"></p>
+  <div id="out"></div>
+
+  <footer>
+    Postings come from a licensed aggregator covering LinkedIn and other boards. Jobs you've already been shown are filtered out on future searches.
+  </footer>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script>
+  const ENDPOINT = "https://housiman.app.n8n.cloud/webhook/job-search";
+
+  if (window.pdfjsLib) {
+    pdfjsLib.GlobalWorkerOptions.workerSrc =
+      "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
+  }
+
+  const $ = (id) => document.getElementById(id);
+  const statusEl = $('status'), out = $('out'), go = $('go');
+  const countrySel = $('country');
+  let category = '', cvText = '';
+
+  // stable per-browser id so duplicate filtering works across visits
+  let sid = '';
+  try {
+    sid = localStorage.getItem('gap_sid') || '';
+    if (!sid) { sid = 'web-' + Math.random().toString(36).slice(2, 11); localStorage.setItem('gap_sid', sid); }
+  } catch (e) { sid = 'web-anon'; }
+
+  $('cats').addEventListener('click', (e) => {
+    const b = e.target.closest('.chip');
+    if (!b) return;
+    const on = b.getAttribute('aria-pressed') === 'true';
+    $('cats').querySelectorAll('.chip').forEach(c => c.setAttribute('aria-pressed', 'false'));
+    if (on) { category = ''; } else { b.setAttribute('aria-pressed', 'true'); category = b.textContent.trim(); }
+  });
+
+  $('drop').addEventListener('click', () => $('file').click());
+
+  $('file').addEventListener('change', async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    $('dropTitle').textContent = 'Reading ' + file.name + '…';
+    try {
+      const buf = await file.arrayBuffer();
+      const pdf = await pdfjsLib.getDocument({ data: buf }).promise;
+      let text = '';
+      const pages = Math.min(pdf.numPages, 6);
+      for (let p = 1; p <= pages; p++) {
+        const page = await pdf.getPage(p);
+        const content = await page.getTextContent();
+        text += content.items.map(i => i.str).join(' ') + '\n';
+      }
+      cvText = text.trim().slice(0, 12000);
+      if (cvText.length < 50) throw new Error('too little text');
+      $('drop').classList.add('loaded');
+      $('dropTitle').textContent = file.name;
+      $('dropSub').textContent = 'Ready — matches will be scored against this.';
+    } catch (err) {
+      cvText = '';
+      $('drop').classList.remove('loaded');
+      $('dropTitle').textContent = 'Could not read that PDF';
+      $('dropSub').textContent = 'It may be a scanned image. Try a text-based PDF, or search without it.';
+    }
+  });
+
+  function band(n) { return n >= 70 ? 's-hi' : n >= 45 ? 's-mid' : 's-lo'; }
+  function esc(s) {
+    return String(s == null ? '' : s).replace(/[&<>"']/g, c => (
+      { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]
+    ));
+  }
+
+  function render(data) {
+    const items = (data.items || []).filter(i => i.type !== 'post');
+    out.innerHTML = '';
+
+    const head = document.createElement('div');
+    head.className = 'meta';
+    head.innerHTML =
+      '<h2>' + esc(data.searched_for || 'Matches') + '</h2>' +
+      (data.linkedin_url ? '<a href="' + esc(data.linkedin_url) + '" target="_blank" rel="noopener">See all on LinkedIn</a>' : '');
+    out.appendChild(head);
+
+    if (data.skipped_seen > 0) {
+      const n = document.createElement('p');
+      n.className = 'hidden-note';
+      n.textContent = data.skipped_seen + (data.skipped_seen === 1 ? ' job you already saw is' : ' jobs you already saw are') + ' hidden.';
+      out.appendChild(n);
+    }
+
+    if (!items.length) {
+      const e = document.createElement('p');
+      e.className = 'empty';
+      e.textContent = data.skipped_seen > 0
+        ? 'Nothing new since your last search.'
+        : 'No matches for that. Try a broader role or a larger market.';
+      out.appendChild(e);
+      return;
+    }
+
+    items.forEach((it, i) => {
+      const hasScore = it.fit_score !== null && it.fit_score !== undefined && it.fit_score !== '';
+      const n = Number(it.fit_score);
+      const gaps = Array.isArray(it.missing_skills) ? it.missing_skills : [];
+
+      const el = document.createElement('article');
+      el.className = 'job';
+      el.style.animationDelay = Math.min(i, 12) * 45 + 'ms';
+      el.innerHTML =
+        '<div class="job-head">' +
+          '<div>' +
+            '<h3>' + esc(it.title) + '</h3>' +
+            '<div class="co">' + esc(it.company_or_source) + '</div>' +
+          '</div>' +
+          (hasScore
+            ? '<div class="score ' + band(n) + '"><b>' + n + '</b><i>fit</i>' +
+              '<div class="bar"><span style="width:' + Math.max(0, Math.min(100, n)) + '%"></span></div></div>'
+            : '') +
+        '</div>' +
+        (it.reason ? '<p class="why">' + esc(it.reason) + '</p>' : '') +
+        (gaps.length
+          ? '<div class="gaps"><p>Asked for, not evidenced in your CV</p>' +
+            gaps.map(g => '<span class="gap">' + esc(g) + '</span>').join('') + '</div>'
+          : '') +
+        '<div class="job-links">' +
+          (it.link ? '<a href="' + esc(it.link) + '" target="_blank" rel="noopener">Open posting</a>' : '') +
+          (it.email ? '<a href="mailto:' + esc(it.email) + '">' + esc(it.email) + '</a>' : '') +
+        '</div>';
+      out.appendChild(el);
+    });
+
+    if (!data.has_cv) {
+      const t = document.createElement('p');
+      t.className = 'hidden-note';
+      t.textContent = 'Add your CV above to score these against your experience.';
+      out.appendChild(t);
+    }
+  }
+
+  $('f').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const role = $('role').value.trim();
+    if (!role && !category) {
+      statusEl.className = 'status bad';
+      statusEl.textContent = 'Pick a field or type a role first.';
+      return;
+    }
+
+    go.disabled = true;
+    go.textContent = 'Searching…';
+    statusEl.className = 'status';
+    statusEl.textContent = 'Searching live postings' + (cvText ? ' and scoring against your CV' : '') + '. Takes up to a minute.';
+    out.innerHTML = '';
+
+    try {
+      const res = await fetch(ENDPOINT, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          category: category,
+          prompt: role,
+          country_code: countrySel.value,
+          country_name: countrySel.options[countrySel.selectedIndex].dataset.name,
+          city: $('city').value.trim(),
+          date_posted: $('posted').value,
+          employment_types: $('etype').value,
+          remote_only: $('remote').checked,
+          interests: $('want').value.trim(),
+          cv_text: cvText,
+          session_id: sid
+        })
+      });
+      if (!res.ok) throw new Error('status ' + res.status);
+      const data = await res.json();
+      statusEl.textContent = '';
+      render(data);
+    } catch (err) {
+      statusEl.className = 'status bad';
+      statusEl.textContent = 'The search service did not respond. It may be offline — try again in a moment.';
+    } finally {
+      go.disabled = false;
+      go.textContent = 'Find matches';
+    }
+  });
+</script>
+</body>
+</html>
