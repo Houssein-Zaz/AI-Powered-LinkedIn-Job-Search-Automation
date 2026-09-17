@@ -1,0 +1,11 @@
+# Never commit real credentials
+*.env
+.env
+secrets.json
+*apikey*
+*api_key*
+
+# OS/editor junk
+.DS_Store
+Thumbs.db
+.vscode/
