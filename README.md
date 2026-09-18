@@ -25,7 +25,7 @@ README.md           — this file
 - Searches live postings from LinkedIn, Indeed, Glassdoor and others through a licensed aggregator (JSearch)
 - Ranks every result against a free-text description of what you want
 - With a CV uploaded, adds a 0–100 fit score and a specific list of requirements your CV doesn't evidence
-- Company-specific search (e.g. "jobs at EY", "Consultant at Google")
+- Company-specific search 
 - Detects internship / French *alternance* (work-study apprenticeship) requests and reasons about them explicitly, since job boards routinely mis-tag them
 - Never shows you the same job twice
 - Filters by country, city, date posted, job type, and remote-only
