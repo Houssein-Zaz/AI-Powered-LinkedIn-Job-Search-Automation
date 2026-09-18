@@ -484,7 +484,8 @@
             }
           ]
         },
-        "batching": {}
+        "batching": {},
+        "needsFallback": true
       },
       "id": "dbf4cf21-140c-44cd-b5c6-5d0148938602",
       "name": "Score Matches (AI)",
@@ -988,6 +989,28 @@
           "name": "Telegram account"
         }
       }
+    },
+    {
+      "parameters": {
+        "modelName": "models/gemini-3.5-flash-lite",
+        "options": {
+          "maxOutputTokens": 8000,
+          "temperature": 0.2
+        }
+      },
+      "id": "0d74a674-4377-41b8-81b7-7b4636fe51a4",
+      "name": "Gemini Fallback Model",
+      "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
+      "typeVersion": 1.1,
+      "position": [
+        720,
+        544
+      ],
+      "credentials": {
+        "googlePalmApi": {
+          "name": "Google Gemini(PaLM) Api account"
+        }
+      }
     }
   ],
   "connections": {
@@ -1345,6 +1368,17 @@
             "node": "Fetch Jobs (JSearch)",
             "type": "main",
             "index": 0
+          }
+        ]
+      ]
+    },
+    "Gemini Fallback Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Score Matches (AI)",
+            "type": "ai_languageModel",
+            "index": 1
           }
         ]
       ]

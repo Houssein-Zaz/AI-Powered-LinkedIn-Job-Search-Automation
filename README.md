@@ -30,6 +30,7 @@ README.md           — this file
 - Never shows you the same job twice
 - Filters by country, city, date posted, job type, and remote-only
 - Logs every match to a Google Sheet, building a dataset over time
+- Automatic AI model fallback — if the primary model hits a quota or errors, a second model picks up the same request automatically
 - Alerts you on Telegram if any part of the pipeline fails
 - `/reset` command clears your CV and search history
 
@@ -51,6 +52,8 @@ Web request ──────────────────────�
                             Telegram digest         Telegram reply      Website JSON   Sheet + seen-jobs log
 ```
 
+The AI scoring step (`Score Matches (AI)`) has two model sub-nodes attached: a primary and a fallback. If the primary errors — quota exceeded, billing issue, model deprecated — n8n automatically retries the exact same request on the fallback before giving up. This is a native n8n feature (`Enable Fallback Model`), not custom code.
+
 A document sent to the bot routes to CV storage; `/reset` routes to clearing that user's data; any node failure anywhere routes to a Telegram alert.
 
 Two data tables hold per-user state: `cv_store` (your CV) and `seen_jobs` (dedupe history), keyed by Telegram chat ID or browser session ID.
@@ -65,12 +68,12 @@ Two data tables hold per-user state: `cv_store` (your CV) and `seen_jobs` (dedup
 |---|---|
 | [n8n](https://n8n.io) | Orchestration, scheduling, state |
 | [JSearch](https://rapidapi.com/letscrape-6bRBa3QguO5/api/jsearch) (RapidAPI) | Live job data |
-| Google Gemini | Relevance scoring and CV gap analysis |
+| Google Gemini (primary + fallback model) | Relevance scoring and CV gap analysis |
 | Telegram Bot API | Chat interface and delivery |
 | Google Sheets | Persistent log of every match |
 | pdf.js | CV text extraction, in the browser |
 
-The AI step is a **Basic LLM Chain with a swappable model sub-node** — deliberately not hardwired to one provider, so if credits run out you swap the sub-node instead of rebuilding the step.
+The AI step is a **Basic LLM Chain with two swappable model sub-nodes** (primary + fallback) — deliberately not hardwired to one provider or one model, so a quota hit or a deprecated model ID doesn't take the whole thing down.
 
 ---
 
@@ -97,11 +100,13 @@ Every node carries a note explaining what it does and what it needs.
 3. Find your chat ID (message **@get_id_bot**) and put it in the **Send to Telegram** node
 4. Message your bot once — bots can't message you until you've messaged them first
 
-### 4. AI model
+### 4. AI model (primary + fallback)
 
-Open **Gemini Model** and connect a Google credential. Generate a free key at [Google AI Studio](https://aistudio.google.com/apikey) — the free tier comfortably covers personal use.
+Open **Gemini Model** and **Gemini Fallback Model**, connect a Google credential to both. Generate a free key at [Google AI Studio](https://aistudio.google.com/apikey).
 
-Any other provider works: replace the sub-node, leave the rest alone.
+Model names drift over time as Google retires/renames them — if either node ever errors with "model not found" or "no longer available," check [Google's current model list](https://ai.google.dev/gemini-api/docs/models) and update the `modelName` field. This happened once already during development (`gemini-2.5-flash-lite` was retired mid-project).
+
+Any provider works for either sub-node: replace it, leave the rest alone.
 
 ### 5. Google Sheet
 
@@ -167,10 +172,12 @@ Supports role, location (` in `), and company (` at `) in any combination. Send 
 - **Empty lookups halt everything.** A node with `alwaysOutputData` off that returns zero rows silently kills the entire branch downstream — the execution reports *success* while doing nothing. Applies to any Data Table "get" with no matching rows.
 - **A write node dropped my search fields.** Chaining a node through a database write operation lost the input data — write nodes typically don't pass through their input, only their own result. Keep write operations as side branches, not in the main data path.
 - **A Switch node's output indices shift when you add a rule.** Adding a new rule to a Switch inserts a new output and pushes the fallback output's index down — any existing connection to the old fallback index needs to move too, or it silently points at a dead end.
+- **"Payment required" doesn't always mean billing is missing.** A free-tier model can return payment-style errors once its daily quota is fully exhausted, not just a rate-limit warning. The fallback model exists specifically for this.
+- **Model IDs get deprecated without much warning.** If a model node suddenly 404s with "no longer available," it's Google retiring that ID — the error message usually names the replacement directly.
 - **Telegram caps messages at 4096 characters.** Long result lists get rejected outright. Formatters split at 3800.
 - **The country parameter is separate from the query text.** Searching "jobs in France" while the country parameter says `us` returns US jobs. It defaults to `us`, so unmapped locations fail quietly.
 - **Alternance/apprenticeship postings are frequently mis-tagged** as full-time by job boards, so filtering by employment type alone misses them — the fix lives in the AI prompt, not the API filter.
-- **Draft is not published.** Editing a node changes the draft. The live webhook and bot keep running the last published version until you publish again — and having the editor open while making API changes can cause edits to silently revert.
+- **Draft is not published.** Editing a node changes the draft. The live webhook and bot keep running the last published version until you publish again — and having the editor open while making API changes can cause edits to silently revert or diverge from the draft.
 - **Scanned PDFs yield no text.** CV extraction needs a text-based PDF.
 
 ---
