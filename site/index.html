@@ -362,6 +362,14 @@
     </fieldset>
 
     <fieldset>
+      <label class="toggle" for="internship">
+        <input type="checkbox" id="internship">
+        Internship / alternance
+      </label>
+      <p class="hint">Looks specifically for internships or French work-study (alternance) contracts, including postings mislabeled as full-time.</p>
+    </fieldset>
+
+    <fieldset>
       <label class="lbl" for="want">What matters to you</label>
       <input type="text" id="want" placeholder="Early-stage, infra work, no on-call">
     </fieldset>
@@ -546,6 +554,7 @@
           date_posted: $('posted').value,
           employment_types: $('etype').value,
           remote_only: $('remote').checked,
+          internship: $('internship').checked,
           interests: $('want').value.trim(),
           cv_text: cvText,
           session_id: sid

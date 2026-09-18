@@ -1,0 +1,1669 @@
+{
+  "name": "LinkedIn-style AI Job & Content Digest",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "triggerAtHour": 8
+            }
+          ]
+        }
+      },
+      "id": "c549491d-27ab-4942-b2cc-e52a2f201806",
+      "name": "Daily 8AM Trigger",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.4,
+      "position": [
+        -2000,
+        48
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "a1",
+              "name": "interest_profile",
+              "type": "string",
+              "value": "Looking for a job in cloud"
+            },
+            {
+              "id": "a2",
+              "name": "job_search_query",
+              "type": "string",
+              "value": "Cloud Engineer"
+            },
+            {
+              "id": "a3",
+              "name": "job_location",
+              "type": "string",
+              "value": "France"
+            },
+            {
+              "id": "a4",
+              "name": "job_country_code",
+              "type": "string",
+              "value": "fr"
+            },
+            {
+              "id": "a5",
+              "name": "rss_feed_url",
+              "type": "string",
+              "value": "https://news.google.com/rss/search?q=B2B+SaaS+product+management"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "3e0e07e9-51d6-4da7-b7a0-620a424b3f66",
+      "name": "Interest Profile (edit me)",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.5,
+      "position": [
+        -1776,
+        48
+      ]
+    },
+    {
+      "parameters": {
+        "url": "https://jsearch.p.rapidapi.com/search-v2",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "query",
+              "value": "={{ $json.job_search_query }} in {{ $json.job_location }} via linkedin"
+            },
+            {
+              "name": "page",
+              "value": "1"
+            },
+            {
+              "name": "num_pages",
+              "value": "3"
+            },
+            {
+              "name": "date_posted",
+              "value": "={{ $json.date_posted || 'month' }}"
+            },
+            {
+              "name": "country",
+              "value": "={{ $json.job_country_code }}"
+            },
+            {
+              "name": "remote_jobs_only",
+              "value": "={{ $json.remote_only === true ? 'true' : 'false' }}"
+            },
+            {
+              "name": "employment_types",
+              "value": "={{ $json.employment_types || 'FULLTIME,CONTRACTOR,PARTTIME,INTERN' }}"
+            }
+          ]
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-RapidAPI-Host",
+              "value": "jsearch.p.rapidapi.com"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "647f0c7a-3842-42fe-a088-67b5e8c06f37",
+      "name": "Fetch Jobs (JSearch)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        -464,
+        304
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "name": "Header Auth account"
+        }
+      }
+    },
+    {
+      "parameters": {},
+      "id": "55ad73a2-8e1a-4a14-99a4-02f8ca042e67",
+      "name": "Combine Jobs + Posts",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        -240,
+        352
+      ]
+    },
+    {
+      "parameters": {
+        "url": "={{ $json.rss_feed_url }}",
+        "options": {}
+      },
+      "id": "0ce7ae58-b611-447f-923b-0dfcf615dd95",
+      "name": "Fetch Posts (RSS)",
+      "type": "n8n-nodes-base.rssFeedRead",
+      "typeVersion": 1.2,
+      "position": [
+        -464,
+        512
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "function extractEmail(text) {\n  if (!text) return '';\n  const match = text.match(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}/);\n  return match ? match[0] : '';\n}\n\nconst allItems = $input.all();\nlet jobs = [];\nlet posts = [];\nfor (const item of allItems) {\n  const d = item.json.data;\n  let jobArray = null;\n  if (Array.isArray(d)) {\n    jobArray = d;\n  } else if (d && Array.isArray(d.jobs)) {\n    jobArray = d.jobs;\n  } else if (d && typeof d === 'object') {\n    jobArray = Object.values(d);\n  }\n  if (jobArray) {\n    jobs = jobArray.filter(function(j) { return j && (j.job_title || j.title); }).slice(0, 30).map(function(j) {\n      const descRaw = j.job_description || j.description || '';\n      return {\n        type: 'job',\n        title: j.job_title || j.title,\n        company: j.employer_name || j.company,\n        location: j.job_city ? (j.job_city + ', ' + j.job_country) : (j.job_country || j.location || ''),\n        link: j.job_apply_link || j.link || j.url,\n        description: descRaw.slice(0, 300),\n        email: extractEmail(descRaw)\n      };\n    });\n  } else if (item.json.title) {\n    posts.push({\n      type: 'post',\n      title: item.json.title,\n      link: item.json.link,\n      description: (item.json.contentSnippet || item.json.content || '').slice(0, 300),\n      email: ''\n    });\n  }\n}\nposts = posts.slice(0, 10);\nreturn [{ json: { items: jobs.concat(posts) } }];"
+      },
+      "id": "e162ae0f-8c56-4d47-8110-cb783891c3c6",
+      "name": "Shape Items for Scoring",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -16,
+        352
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "function getProfile() {\n  try { return $('Interest Profile (edit me)').first().json; } catch (e) {}\n  return {};\n}\nconst profile = getProfile();\nconst kw = encodeURIComponent(profile.job_search_query || '');\nconst loc = encodeURIComponent(profile.job_location || '');\nconst linkedInUrl = 'https://www.linkedin.com/jobs/search/?keywords=' + kw + '&location=' + loc;\n\nconst output = $input.first().json;\nlet items = [];\n\nif (Array.isArray(output.items)) {\n  items = output.items.map(function(it) {\n    return {\n      type: it.type,\n      title: it.title,\n      company_or_source: it.company || 'LinkedIn',\n      link: it.link,\n      reason: 'Keyword match (AI ranking currently off)'\n    };\n  });\n} else {\n  let raw = '';\n  if (typeof output.content === 'string') { raw = output.content; }\n  else if (Array.isArray(output.content)) {\n    const textBlock = output.content.find(function(c) { return c.type === 'text'; });\n    raw = textBlock ? textBlock.text : '';\n  } else if (output.text) { raw = output.text; }\n  else if (output.response) { raw = output.response; }\n  else if (output.output) { raw = output.output; }\n  const cleaned = raw.replace(/```json|```/g, '').trim();\n  try { items = JSON.parse(cleaned); } catch (e) { items = []; }\n  if (!Array.isArray(items)) { items = []; }\n}\n\nconst header = 'Your Daily Match Digest\\n\\nView live results on LinkedIn: ' + linkedInUrl + '\\n\\n';\nif (!items.length) {\n  return [{ json: { message: header + 'No strong matches today.' } }];\n}\n\nconst MAX_LEN = 3800;\nconst chunks = [];\nlet current = header;\nfor (let i = 0; i < items.length; i++) {\n  const it = items[i];\n  const label = it.type === 'job' ? 'JOB' : 'POST';\n  const entry = (i + 1) + '. [' + label + '] ' + it.title + '\\n' + (it.company_or_source || '') + '\\n' + it.reason + '\\n' + it.link + '\\n\\n';\n  if ((current + entry).length > MAX_LEN) {\n    chunks.push(current);\n    current = entry;\n  } else {\n    current += entry;\n  }\n}\nif (current) chunks.push(current);\n\nreturn chunks.map(function(c) { return { json: { message: c } }; });"
+      },
+      "id": "b4b56377-199c-423c-9003-882bb5eb5279",
+      "name": "Format Digest",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        864,
+        128
+      ]
+    },
+    {
+      "parameters": {
+        "chatId": "7611149237",
+        "text": "={{ $json.message }}",
+        "additionalFields": {
+          "appendAttribution": false,
+          "parse_mode": "Markdown"
+        }
+      },
+      "id": "d76e03d6-c53d-4474-93ce-a70340ddb6f3",
+      "name": "Send to Telegram",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        1312,
+        128
+      ],
+      "credentials": {
+        "telegramApi": {
+          "name": "Telegram account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "updates": [
+          "message"
+        ],
+        "additionalFields": {}
+      },
+      "id": "e292875d-010b-4c4b-b239-9a92465c5ab2",
+      "name": "Telegram Bot Query",
+      "type": "n8n-nodes-base.telegramTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        -2000,
+        784
+      ],
+      "credentials": {
+        "telegramApi": {
+          "name": "Telegram account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const msg = $json.message || {};\nconst text = (msg.text || '').trim();\nconst chatId = msg.chat ? msg.chat.id : null;\n\nconst countryMap = {\n  'usa': 'us', 'united states': 'us', 'us': 'us', 'america': 'us',\n  'france': 'fr', 'tunisia': 'tn', 'canada': 'ca', 'uk': 'gb', 'united kingdom': 'gb',\n  'england': 'gb', 'germany': 'de', 'spain': 'es', 'italy': 'it', 'morocco': 'ma',\n  'algeria': 'dz', 'egypt': 'eg', 'india': 'in', 'netherlands': 'nl', 'belgium': 'be',\n  'switzerland': 'ch', 'uae': 'ae', 'dubai': 'ae', 'saudi arabia': 'sa', 'australia': 'au',\n  'ireland': 'ie', 'portugal': 'pt', 'qatar': 'qa', 'remote': 'us'\n};\n\nlet query = text;\nlet location = 'Remote';\nconst match = text.match(/^(.*)\\s+in\\s+([A-Za-z\\s]+)$/i);\nif (match) {\n  query = match[1].trim();\n  location = match[2].trim();\n}\n\nconst countryCode = countryMap[location.toLowerCase()] || 'us';\n\nconst internshipWords = /\\b(alternance|apprenticeship|apprentice|internship|intern|stage)\\b/i;\nconst wantsInternship = internshipWords.test(text);\n\nlet interestProfile = text || 'General interest';\nif (wantsInternship) {\n  interestProfile += '. IMPORTANT: the candidate is specifically looking for an internship or alternance/apprenticeship contract (a French work-study program combining study and paid work at a company), not a standard full-time role. Prioritize postings that mention internship, apprenticeship, alternance, stage, work-study, or co-op, even if the listing is formally tagged as full-time or part-time - alternance roles are frequently mis-tagged by job boards. Exclude senior or experienced-only roles.';\n}\n\nreturn [{ json: {\n  interest_profile: interestProfile,\n  job_search_query: query || 'jobs',\n  job_location: location,\n  job_country_code: countryCode,\n  country_name: location,\n  wants_internship: wantsInternship,\n  telegram_chat_id: chatId\n} }];"
+      },
+      "id": "435adeae-be6c-4c32-bde2-dd427497d091",
+      "name": "Prepare Telegram Query",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -1568,
+        784
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "function getProfile() {\n  try { return $('Interest Profile (edit me)').first().json; } catch (e) {}\n  try { return $('Prepare Telegram Query').first().json; } catch (e) {}\n  return {};\n}\nconst profile = getProfile();\nlet chatId = null;\ntry { chatId = $('Prepare Telegram Query').first().json.telegram_chat_id; } catch (e) {}\nif (!chatId) { return [{ json: { chatId: null, message: '' } }]; }\n\nlet skipped = 0;\nlet hasCv = false;\ntry {\n  skipped = $('Filter New Jobs').first().json.skipped_seen || 0;\n  hasCv = $('Filter New Jobs').first().json.has_cv || false;\n} catch (e) {}\n\nconst kw = encodeURIComponent(profile.job_search_query || '');\nconst loc = encodeURIComponent(profile.job_location || '');\nconst linkedInUrl = 'https://www.linkedin.com/jobs/search/?keywords=' + kw + '&location=' + loc;\n\nconst output = $input.first().json;\nlet items = [];\nif (Array.isArray(output.items)) {\n  items = output.items;\n} else {\n  let raw = '';\n  if (typeof output.content === 'string') { raw = output.content; }\n  else if (Array.isArray(output.content)) {\n    const tb = output.content.find(function(c) { return c.type === 'text'; });\n    raw = tb ? tb.text : '';\n  } else if (output.text) { raw = output.text; }\n  else if (output.response) { raw = output.response; }\n  else if (output.output) { raw = output.output; }\n  const cleaned = raw.replace(/```json|```/g, '').trim();\n  try { items = JSON.parse(cleaned); } catch (e) { items = []; }\n  if (!Array.isArray(items)) { items = []; }\n}\n\nlet header = 'Results for: ' + (profile.job_search_query || '') + '\\n';\nif (skipped > 0) { header += '(' + skipped + ' already-seen job' + (skipped === 1 ? '' : 's') + ' hidden)\\n'; }\nif (!hasCv) { header += '\\nSend me your CV as a PDF to get fit scores and skill gaps.\\n'; }\nheader += '\\nAll results on LinkedIn: ' + linkedInUrl + '\\n\\n';\n\nif (!items.length) {\n  const msg = skipped > 0\n    ? header + 'No new matches - everything found was already sent to you before.'\n    : header + 'No strong matches found. Try a broader search term.';\n  return [{ json: { chatId: chatId, message: msg } }];\n}\n\nconst MAX_LEN = 3800;\nconst chunks = [];\nlet current = header;\nfor (let i = 0; i < items.length; i++) {\n  const it = items[i];\n  let entry = (i + 1) + '. ' + it.title + '\\n' + (it.company_or_source || '') + '\\n';\n  const score = it.fit_score;\n  if (score !== null && score !== undefined && score !== '') {\n    entry += 'Fit: ' + score + '/100\\n';\n    if (Array.isArray(it.missing_skills) && it.missing_skills.length) {\n      entry += 'Missing: ' + it.missing_skills.join(', ') + '\\n';\n    }\n  }\n  entry += it.link + '\\n\\n';\n  if ((current + entry).length > MAX_LEN) {\n    chunks.push(current);\n    current = entry;\n  } else {\n    current += entry;\n  }\n}\nif (current) chunks.push(current);\n\nreturn chunks.map(function(c) { return { json: { chatId: chatId, message: c } }; });"
+      },
+      "id": "621af8f6-c09f-4a02-9bb0-533bfc944248",
+      "name": "Format Telegram Reply",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        864,
+        320
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "combinator": "and",
+          "conditions": [
+            {
+              "leftValue": "={{ $json.chatId }}",
+              "operator": {
+                "operation": "notEmpty",
+                "type": "string"
+              },
+              "rightValue": ""
+            }
+          ],
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 1
+          }
+        },
+        "options": {}
+      },
+      "id": "0456c61c-6d31-491a-9d86-6a7f64345313",
+      "name": "Has Chat ID",
+      "type": "n8n-nodes-base.filter",
+      "typeVersion": 2.2,
+      "position": [
+        1088,
+        304
+      ]
+    },
+    {
+      "parameters": {
+        "chatId": "=7611149237",
+        "text": "={{ $json.message }}",
+        "additionalFields": {
+          "appendAttribution": false,
+          "parse_mode": "Markdown"
+        }
+      },
+      "id": "56d914a7-8782-41d4-8503-37996c2c130f",
+      "name": "Send Telegram Reply",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        1312,
+        304
+      ],
+      "credentials": {
+        "telegramApi": {
+          "name": "Telegram account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $('Daily 8AM Trigger').isExecuted }}",
+              "operator": {
+                "operation": "equals",
+                "type": "boolean"
+              },
+              "rightValue": true,
+              "id": "96b88489-40dd-46fa-a7a2-8adba333fed8"
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "1aef9ea2-2186-41bf-a304-df9ffab57bed",
+      "name": "Is Scheduled Run",
+      "type": "n8n-nodes-base.filter",
+      "typeVersion": 2.2,
+      "position": [
+        1088,
+        128
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "function getProfile() {\n  try { if ($('Interest Profile (edit me)').isExecuted) return $('Interest Profile (edit me)').first().json; } catch (e) {}\n  try { if ($('Prepare Telegram Query').isExecuted) return $('Prepare Telegram Query').first().json; } catch (e) {}\n  try { if ($('Prepare Web Query').isExecuted) return $('Prepare Web Query').first().json; } catch (e) {}\n  return {};\n}\nconst profile = getProfile();\n\nconst country = profile.country_name\n  || profile.job_location\n  || (profile.job_country_code ? String(profile.job_country_code).toUpperCase() : '');\n\nlet chatId = '7611149237';\ntry {\n  if ($('Prepare Telegram Query').isExecuted) {\n    chatId = String($('Prepare Telegram Query').first().json.telegram_chat_id);\n  } else if ($('Prepare Web Query').isExecuted) {\n    chatId = String($('Prepare Web Query').first().json.session_id);\n  }\n} catch (e) {}\n\nconst output = $input.first().json;\nlet items = [];\nif (Array.isArray(output.items)) {\n  items = output.items;\n} else {\n  let raw = '';\n  if (typeof output.content === 'string') { raw = output.content; }\n  else if (Array.isArray(output.content)) {\n    const tb = output.content.find(function(c) { return c.type === 'text'; });\n    raw = tb ? tb.text : '';\n  } else if (output.text) { raw = output.text; }\n  else if (output.response) { raw = output.response; }\n  else if (output.output) { raw = output.output; }\n  const cleaned = raw.replace(/```json|```/g, '').trim();\n  try { items = JSON.parse(cleaned); } catch (e) { items = []; }\n  if (!Array.isArray(items)) { items = []; }\n}\n\nconst jobsOnly = items.filter(function(it) { return it.type === 'job' && it.link; });\n\nreturn jobsOnly.map(function(it) {\n  return {\n    json: {\n      company: it.company_or_source || '',\n      email: it.email || '',\n      job_title: it.title || '',\n      link: it.link || '',\n      searched_for: profile.job_search_query || '',\n      date_found: new Date().toISOString().slice(0, 10),\n      country: country,\n      chat_id: chatId\n    }\n  };\n});"
+      },
+      "id": "c3f784a8-0f8a-444f-9163-06a2c8ec6c70",
+      "name": "Prepare Sheet Rows",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        864,
+        464
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "mode": "list",
+          "value": "YOUR_SPREADSHEET_ID"
+        },
+        "sheetName": {
+          "__rl": true,
+          "mode": "list",
+          "value": "gid=0"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "matchingColumns": [],
+          "schema": [
+            {
+              "canBeUsedToMatch": true,
+              "display": true,
+              "displayName": "Company",
+              "id": "Company",
+              "required": false,
+              "type": "string"
+            },
+            {
+              "canBeUsedToMatch": true,
+              "display": true,
+              "displayName": "Email",
+              "id": "Email",
+              "required": false,
+              "type": "string"
+            },
+            {
+              "canBeUsedToMatch": true,
+              "display": true,
+              "displayName": "Job Title",
+              "id": "Job Title",
+              "required": false,
+              "type": "string"
+            },
+            {
+              "canBeUsedToMatch": true,
+              "display": true,
+              "displayName": "Link",
+              "id": "Link",
+              "required": false,
+              "type": "string"
+            },
+            {
+              "canBeUsedToMatch": true,
+              "display": true,
+              "displayName": "Searched For",
+              "id": "Searched For",
+              "required": false,
+              "type": "string"
+            },
+            {
+              "canBeUsedToMatch": true,
+              "display": true,
+              "displayName": "Date Found",
+              "id": "Date Found",
+              "required": false,
+              "type": "string"
+            },
+            {
+              "canBeUsedToMatch": true,
+              "display": true,
+              "displayName": "Country",
+              "id": "Country",
+              "required": false,
+              "type": "string"
+            }
+          ],
+          "value": {
+            "Company": "={{ $json.company }}",
+            "Country": "={{ $json.country }}",
+            "Date Found": "={{ $json.date_found }}",
+            "Email": "={{ $json.email }}",
+            "Job Title": "={{ $json.job_title }}",
+            "Link": "={{ $json.link }}",
+            "Searched For": "={{ $json.searched_for }}"
+          }
+        },
+        "options": {}
+      },
+      "id": "36e3aa10-f217-4f3a-898b-b69dae584160",
+      "name": "Log to Google Sheet",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.6,
+      "position": [
+        1088,
+        464
+      ],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "options": {
+          "maxOutputTokens": 8000,
+          "temperature": 0.2
+        }
+      },
+      "id": "2cb9eb4c-9aa6-4037-b8cb-83f780f8188b",
+      "name": "Gemini Model",
+      "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
+      "typeVersion": 1.1,
+      "position": [
+        640,
+        544
+      ],
+      "credentials": {
+        "googlePalmApi": {
+          "name": "Google Gemini(PaLM) Api account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=Interest profile: {{ $(\"Interest Profile (edit me)\").isExecuted ? $(\"Interest Profile (edit me)\").first().json.interest_profile : ($(\"Prepare Telegram Query\").isExecuted ? $(\"Prepare Telegram Query\").first().json.interest_profile : $(\"Prepare Web Query\").first().json.interest_profile) }}\n\nCandidate CV (may be empty):\n{{ $json.cv_text }}\n\nItems (JSON): {{ JSON.stringify($json.items) }}\n\nReturn ONLY valid JSON (no markdown, no preamble): an array of ALL items that are genuinely relevant matches to the interest profile, best first. Do not artificially cap the count. Only exclude items that clearly do not fit.\n\nEach item shaped as {\"type\":\"job|post\",\"title\":\"...\",\"company_or_source\":\"...\",\"link\":\"...\",\"reason\":\"one short sentence on why it fits\",\"email\":\"...\",\"fit_score\":0-100 or null,\"missing_skills\":[\"...\"]}.\n\nRules:\n- email: copy EXACTLY from the matching input item's own \"email\" field; if empty, output \"\". NEVER invent an email.\n- If the CV above is empty or under 50 characters, set fit_score to null and missing_skills to [].\n- If a CV IS provided, set fit_score to how well THIS candidate's actual CV matches THIS job (0-100), and list in missing_skills up to 4 concrete requirements the job asks for that the CV does not evidence. Be honest and specific - name real technologies or experience, not vague traits. If the CV covers everything, return an empty array.\n- Sort by fit_score descending when scores exist.",
+        "messages": {
+          "messageValues": [
+            {
+              "message": "You are ranking job listings against a person's interest profile. Only return valid JSON, nothing else. Never invent or fabricate email addresses."
+            }
+          ]
+        },
+        "batching": {}
+      },
+      "id": "dbf4cf21-140c-44cd-b5c6-5d0148938602",
+      "name": "Score Matches (AI)",
+      "type": "@n8n/n8n-nodes-langchain.chainLlm",
+      "typeVersion": 1.9,
+      "position": [
+        640,
+        352
+      ]
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "loose",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.message.document ? 'yes' : 'no' }}",
+                    "operator": {
+                      "operation": "equals",
+                      "type": "string"
+                    },
+                    "rightValue": "yes",
+                    "id": "d60a74e8-7c1b-4076-9b77-0662a74a39de"
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "CV Upload"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "loose",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ ($json.message.text || '').trim().toLowerCase() }}",
+                    "operator": {
+                      "operation": "equals",
+                      "type": "string"
+                    },
+                    "rightValue": "/reset",
+                    "id": "505d6b2c-162d-42ca-8c49-4104b9e21ab7"
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "Reset"
+            }
+          ]
+        },
+        "looseTypeValidation": true,
+        "options": {
+          "fallbackOutput": "extra",
+          "renameFallbackOutput": "Text Search"
+        }
+      },
+      "id": "11a7c522-5a88-4610-a25e-ecc580059353",
+      "name": "Route Message Type",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.4,
+      "position": [
+        -1776,
+        784
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "file",
+        "fileId": "={{ $json.message.document.file_id }}",
+        "additionalFields": {}
+      },
+      "id": "a0a27b5d-d20d-4d30-bb47-de2adb1be1f3",
+      "name": "Download CV",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        -1568,
+        1312
+      ],
+      "credentials": {
+        "telegramApi": {
+          "name": "Telegram account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "pdf",
+        "options": {
+          "joinPages": true,
+          "maxPages": 6
+        }
+      },
+      "id": "27991895-9d27-4fa5-85a3-5d5e1b326d9b",
+      "name": "Extract CV Text",
+      "type": "n8n-nodes-base.extractFromFile",
+      "typeVersion": 1.1,
+      "position": [
+        -1344,
+        1312
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "upsert",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "name",
+          "value": "cv_store"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "chat_id",
+              "keyValue": "={{ $('Telegram Bot Query').item.json.message.chat.id }}"
+            }
+          ]
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "schema": [
+            {
+              "canBeUsedToMatch": true,
+              "display": true,
+              "displayName": "chat_id",
+              "id": "chat_id",
+              "required": false,
+              "type": "string"
+            },
+            {
+              "canBeUsedToMatch": true,
+              "display": true,
+              "displayName": "cv_text",
+              "id": "cv_text",
+              "required": false,
+              "type": "string"
+            },
+            {
+              "canBeUsedToMatch": true,
+              "display": true,
+              "displayName": "updated_at",
+              "id": "updated_at",
+              "required": false,
+              "type": "string"
+            }
+          ],
+          "value": {
+            "chat_id": "={{ $('Telegram Bot Query').item.json.message.chat.id }}",
+            "cv_text": "={{ ($json.text || '').slice(0, 12000) }}",
+            "updated_at": "={{ $now.toISO() }}"
+          }
+        },
+        "options": {}
+      },
+      "id": "1a5717a2-97f9-49da-bd8a-56e5bbc9c857",
+      "name": "Save CV",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        -1120,
+        1312
+      ]
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $('Telegram Bot Query').item.json.message.chat.id }}",
+        "text": "=CV saved. From now on, every job I send you will include a fit score and the skills you're missing.\n\nJust send me a role like \"Cloud engineer in France\" to try it.",
+        "additionalFields": {
+          "appendAttribution": false
+        }
+      },
+      "id": "e65e0f61-62fc-43c9-8dc2-c51aa7367b83",
+      "name": "Confirm CV Saved",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        -896,
+        1312
+      ],
+      "credentials": {
+        "telegramApi": {
+          "name": "Telegram account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "get",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "name",
+          "value": "cv_store"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "chat_id",
+              "keyValue": "={{ $('Prepare Telegram Query').isExecuted ? $('Prepare Telegram Query').first().json.telegram_chat_id : ($('Prepare Web Query').isExecuted ? $('Prepare Web Query').first().json.session_id : '7611149237') }}"
+            }
+          ]
+        },
+        "limit": 1
+      },
+      "id": "cc73f548-7788-4b6a-8aec-023bd6b105c1",
+      "name": "Load CV",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        208,
+        272
+      ],
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "operation": "get",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "name",
+          "value": "seen_jobs"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "chat_id",
+              "keyValue": "={{ $('Prepare Telegram Query').isExecuted ? $('Prepare Telegram Query').first().json.telegram_chat_id : ($('Prepare Web Query').isExecuted ? $('Prepare Web Query').first().json.session_id : '7611149237') }}"
+            }
+          ]
+        },
+        "returnAll": true
+      },
+      "id": "f867117b-0d02-4272-938b-82794de91280",
+      "name": "Load Seen Jobs",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        208,
+        432
+      ],
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "jsCode": "const items = $('Shape Items for Scoring').first().json.items || [];\n\nlet seen = [];\ntry {\n  seen = $('Load Seen Jobs').all()\n    .map(function(i) { return i.json.job_link; })\n    .filter(Boolean);\n} catch (e) { seen = []; }\nconst seenSet = new Set(seen);\n\nconst fresh = items.filter(function(it) {\n  if (it.type !== 'job') return true;\n  return !seenSet.has(it.link);\n});\n\nlet cv = '';\ntry { cv = $('Load CV').first().json.cv_text || ''; } catch (e) { cv = ''; }\ntry {\n  if ($('Prepare Web Query').isExecuted) {\n    const webCv = $('Prepare Web Query').first().json.cv_text;\n    if (webCv && webCv.length > 50) { cv = webCv; }\n  }\n} catch (e) {}\n\nreturn [{ json: {\n  items: fresh,\n  cv_text: cv,\n  has_cv: cv.length > 50,\n  skipped_seen: items.length - fresh.length\n} }];"
+      },
+      "id": "39627455-4b01-46d2-8464-48feeff57cbe",
+      "name": "Filter New Jobs",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        432,
+        352
+      ]
+    },
+    {
+      "parameters": {
+        "dataTableId": {
+          "__rl": true,
+          "mode": "name",
+          "value": "seen_jobs"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "schema": [
+            {
+              "canBeUsedToMatch": true,
+              "display": true,
+              "displayName": "chat_id",
+              "id": "chat_id",
+              "required": false,
+              "type": "string"
+            },
+            {
+              "canBeUsedToMatch": true,
+              "display": true,
+              "displayName": "job_link",
+              "id": "job_link",
+              "required": false,
+              "type": "string"
+            },
+            {
+              "canBeUsedToMatch": true,
+              "display": true,
+              "displayName": "seen_at",
+              "id": "seen_at",
+              "required": false,
+              "type": "string"
+            }
+          ],
+          "value": {
+            "chat_id": "={{ $json.chat_id }}",
+            "job_link": "={{ $json.link }}",
+            "seen_at": "={{ $now.toISO() }}"
+          }
+        },
+        "options": {
+          "optimizeBulk": true
+        }
+      },
+      "id": "2fb9b985-cff0-476f-9383-4510dd0ccd12",
+      "name": "Record Seen Jobs",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        1312,
+        464
+      ]
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "job-search",
+        "responseMode": "responseNode",
+        "options": {
+          "allowedOrigins": "*"
+        }
+      },
+      "id": "fbcce378-3602-4190-8a02-043198acd4da",
+      "name": "Web Search Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        -2000,
+        1088
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const body = $json.body || {};\nconst category = (body.category || '').trim();\nconst prompt = (body.prompt || '').trim();\nconst interests = (body.interests || '').trim();\nconst city = (body.city || '').trim();\nconst countryCode = ((body.country_code || 'us').trim() || 'us').toLowerCase();\nconst countryName = (body.country_name || '').trim();\nconst cvText = (body.cv_text || '').trim();\nconst sessionId = (body.session_id || 'web-anon').trim();\nconst wantsInternship = body.internship === true;\n\nconst allowedDates = ['all', 'today', '3days', 'week', 'month'];\nlet datePosted = (body.date_posted || 'month').trim();\nif (allowedDates.indexOf(datePosted) === -1) { datePosted = 'month'; }\n\nconst remoteOnly = body.remote_only === true;\nlet employmentTypes = (body.employment_types || '').trim() || 'FULLTIME,CONTRACTOR,PARTTIME,INTERN';\nif (wantsInternship) {\n  employmentTypes = 'FULLTIME,PARTTIME,INTERN,CONTRACTOR';\n}\n\nconst location = remoteOnly ? 'Remote' : (city || countryName || 'Remote');\nconst searchQuery = [category, prompt].filter(Boolean).join(' ') || interests || 'jobs';\n\nlet interestProfile = [prompt, interests].filter(Boolean).join('. Also interested in: ') || category || 'General interest';\nif (wantsInternship) {\n  interestProfile += '. IMPORTANT: the candidate is specifically looking for an internship or alternance/apprenticeship contract (a French work-study program combining study and paid work at a company), not a standard full-time role. Prioritize postings that mention internship, apprenticeship, alternance, stage, work-study, or co-op, even if the listing is formally tagged as full-time or part-time - alternance roles are frequently mis-tagged by job boards. Exclude senior or experienced-only roles.';\n}\n\nreturn [{ json: {\n  interest_profile: interestProfile,\n  job_search_query: searchQuery,\n  job_location: location,\n  job_country_code: countryCode,\n  country_name: countryName || countryCode.toUpperCase(),\n  date_posted: datePosted,\n  remote_only: remoteOnly,\n  employment_types: employmentTypes,\n  wants_internship: wantsInternship,\n  cv_text: cvText.slice(0, 12000),\n  session_id: sessionId\n} }];"
+      },
+      "id": "fe8cae7a-de52-4cc4-b7fa-4f1460e6a99c",
+      "name": "Prepare Web Query",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -1776,
+        1088
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "let skipped = 0;\nlet hasCv = false;\ntry {\n  skipped = $('Filter New Jobs').first().json.skipped_seen || 0;\n  hasCv = $('Filter New Jobs').first().json.has_cv || false;\n} catch (e) {}\n\nlet profile = {};\ntry { profile = $('Prepare Web Query').first().json; } catch (e) {}\nconst kw = encodeURIComponent(profile.job_search_query || '');\nconst loc = encodeURIComponent(profile.job_location || '');\nconst linkedInUrl = 'https://www.linkedin.com/jobs/search/?keywords=' + kw + '&location=' + loc;\n\nconst output = $input.first().json;\nlet items = [];\nif (Array.isArray(output.items)) {\n  items = output.items;\n} else {\n  let raw = '';\n  if (typeof output.content === 'string') { raw = output.content; }\n  else if (Array.isArray(output.content)) {\n    const tb = output.content.find(function(c) { return c.type === 'text'; });\n    raw = tb ? tb.text : '';\n  } else if (output.text) { raw = output.text; }\n  else if (output.response) { raw = output.response; }\n  else if (output.output) { raw = output.output; }\n  const cleaned = raw.replace(/```json|```/g, '').trim();\n  try { items = JSON.parse(cleaned); } catch (e) { items = []; }\n  if (!Array.isArray(items)) { items = []; }\n}\n\nreturn [{ json: {\n  items: items,\n  skipped_seen: skipped,\n  has_cv: hasCv,\n  linkedin_url: linkedInUrl,\n  searched_for: profile.job_search_query || ''\n} }];"
+      },
+      "id": "955b1f27-71c8-4511-9bc4-51ec11980c2d",
+      "name": "Format Web Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        864,
+        624
+      ]
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "id": "6759aada-c0de-4ed5-9fb5-29710d93596d",
+      "name": "Respond to Web",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        1088,
+        624
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "get",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "name",
+          "value": "usage_log"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "identity",
+              "keyValue": "={{ $('Prepare Telegram Query').isExecuted ? $('Prepare Telegram Query').first().json.telegram_chat_id : $('Prepare Web Query').first().json.session_id }}"
+            },
+            {
+              "keyName": "usage_date",
+              "keyValue": "={{ $now.toFormat('yyyy-MM-dd') }}"
+            }
+          ]
+        }
+      },
+      "id": "379ff998-5cc7-4dad-87f8-af6262e7543a",
+      "name": "Load Usage Today",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        -1344,
+        944
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const DAILY_LIMIT = 15;\n\nlet source = {};\ntry {\n  if ($('Prepare Telegram Query').isExecuted) { source = $('Prepare Telegram Query').first().json; }\n  else if ($('Prepare Web Query').isExecuted) { source = $('Prepare Web Query').first().json; }\n} catch (e) {}\n\nlet identity = '';\ntry {\n  identity = $('Prepare Telegram Query').isExecuted\n    ? String($('Prepare Telegram Query').first().json.telegram_chat_id)\n    : String($('Prepare Web Query').first().json.session_id);\n} catch (e) {}\n\nconst today = new Date().toISOString().slice(0, 10);\n\nlet currentCount = 0;\ntry {\n  const row = $input.first().json;\n  if (row && row.count !== undefined) { currentCount = parseInt(row.count, 10) || 0; }\n} catch (e) {}\n\nconst allowed = currentCount < DAILY_LIMIT;\n\nreturn [{ json: Object.assign({}, source, {\n  identity: identity,\n  usage_date: today,\n  current_count: currentCount,\n  new_count: currentCount + 1,\n  allowed: allowed,\n  daily_limit: DAILY_LIMIT\n}) }];"
+      },
+      "id": "b42cb590-d91f-4104-9bff-f37f2b848fbb",
+      "name": "Check Rate Limit",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -1120,
+        944
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "combinator": "and",
+          "conditions": [
+            {
+              "leftValue": "={{ $json.allowed }}",
+              "operator": {
+                "operation": "equals",
+                "type": "boolean"
+              },
+              "rightValue": true
+            }
+          ],
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          }
+        },
+        "options": {}
+      },
+      "id": "ab2c7463-7400-4a84-99a5-760bea69b7ad",
+      "name": "Under Daily Limit",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        -896,
+        944
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "upsert",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "name",
+          "value": "usage_log"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "identity",
+              "keyValue": "={{ $json.identity }}"
+            },
+            {
+              "keyName": "usage_date",
+              "keyValue": "={{ $json.usage_date }}"
+            }
+          ]
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "schema": [
+            {
+              "canBeUsedToMatch": true,
+              "display": true,
+              "displayName": "identity",
+              "id": "identity",
+              "required": false,
+              "type": "string"
+            },
+            {
+              "canBeUsedToMatch": true,
+              "display": true,
+              "displayName": "usage_date",
+              "id": "usage_date",
+              "required": false,
+              "type": "string"
+            },
+            {
+              "canBeUsedToMatch": true,
+              "display": true,
+              "displayName": "count",
+              "id": "count",
+              "required": false,
+              "type": "string"
+            }
+          ],
+          "value": {
+            "count": "={{ $json.new_count }}",
+            "identity": "={{ $json.identity }}",
+            "usage_date": "={{ $json.usage_date }}"
+          }
+        },
+        "options": {}
+      },
+      "id": "6dce0b24-6c7b-4945-b274-0fee40ca8a60",
+      "name": "Increment Usage",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        -688,
+        864
+      ]
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "combinator": "and",
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.telegram_chat_id ? 'yes' : 'no' }}",
+                    "operator": {
+                      "operation": "equals",
+                      "type": "string"
+                    },
+                    "rightValue": "yes"
+                  }
+                ],
+                "options": {
+                  "caseSensitive": false,
+                  "leftValue": "",
+                  "typeValidation": "loose",
+                  "version": 1
+                }
+              },
+              "renameOutput": true,
+              "outputKey": "Telegram"
+            }
+          ]
+        },
+        "looseTypeValidation": true,
+        "options": {
+          "fallbackOutput": "extra",
+          "renameFallbackOutput": "Web"
+        }
+      },
+      "id": "bd064674-2a30-40cc-8d50-48d02c7af6fd",
+      "name": "Route Limit Notice",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.4,
+      "position": [
+        -688,
+        1024
+      ]
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $json.telegram_chat_id }}",
+        "text": "=You've reached today's search limit ({{ $json.daily_limit }} searches/day). This keeps the bot running for everyone - try again tomorrow.",
+        "additionalFields": {
+          "appendAttribution": false
+        }
+      },
+      "id": "b3438bf3-9e75-4d2d-a420-1dd931c3a632",
+      "name": "Send TG Limit Notice",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        -464,
+        896
+      ],
+      "credentials": {
+        "telegramApi": {
+          "name": "Telegram account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "return [{ json: {\n  items: [],\n  skipped_seen: 0,\n  has_cv: false,\n  rate_limited: true,\n  message: \"Daily search limit reached (\" + ($json.daily_limit || 15) + \" searches/day) for this browser. Try again tomorrow.\"\n} }];"
+      },
+      "id": "fe89fcf5-b732-4d5b-82ec-70a0823db222",
+      "name": "Format Web Limit",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -464,
+        1072
+      ]
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "id": "63c95932-ed1e-43fb-ae79-e7290913ed6c",
+      "name": "Respond Web Limited",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        -240,
+        1072
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "deleteRows",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "name",
+          "value": "cv_store"
+        },
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "chat_id",
+              "keyValue": "={{ String($json.message.chat.id) }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "a5c52819-1df1-46f3-bcf3-d7a1cb70f649",
+      "name": "Delete CV Row",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        -1568,
+        1488
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "deleteRows",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "name",
+          "value": "seen_jobs"
+        },
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "chat_id",
+              "keyValue": "={{ String($('Telegram Bot Query').first().json.message.chat.id) }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "1b07b9eb-3953-46f7-ac1c-1e461d2bd72a",
+      "name": "Delete Seen Jobs Rows",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        -1344,
+        1488
+      ]
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $('Telegram Bot Query').first().json.message.chat.id }}",
+        "text": "Cleared your saved CV and search history. Fresh start - send a role to search, or a CV to save a new one.",
+        "additionalFields": {
+          "appendAttribution": false
+        }
+      },
+      "id": "73fb33a2-7688-43ec-afbb-75525f0ce84b",
+      "name": "Confirm Reset",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        -1120,
+        1488
+      ],
+      "credentials": {
+        "telegramApi": {
+          "name": "Telegram account"
+        }
+      }
+    },
+    {
+      "parameters": {},
+      "id": "7f976e7f-71a4-468a-a05f-1ba07b5fa921",
+      "name": "On Any Error",
+      "type": "n8n-nodes-base.errorTrigger",
+      "typeVersion": 1,
+      "position": [
+        -2000,
+        1712
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const exec = $json.execution || {};\nconst wf = $json.workflow || {};\nconst err = exec.error || {};\n\nconst nodeName = err.node && err.node.name ? err.node.name : 'unknown node';\nconst msg = err.message || 'no message';\nconst when = new Date().toISOString().replace('T', ' ').slice(0, 19) + ' UTC';\n\nconst text = 'Workflow error\\n\\n' +\n  'Workflow: ' + (wf.name || 'unknown') + '\\n' +\n  'Node: ' + nodeName + '\\n' +\n  'Error: ' + msg + '\\n' +\n  'Time: ' + when + '\\n\\n' +\n  'Check n8n Executions for full details.';\n\nreturn [{ json: { message: text } }];"
+      },
+      "id": "15de237b-9bd3-4835-82d6-442d9b1725de",
+      "name": "Format Error Alert",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -1776,
+        1712
+      ]
+    },
+    {
+      "parameters": {
+        "chatId": "7611149237",
+        "text": "={{ $json.message }}",
+        "additionalFields": {
+          "appendAttribution": false
+        }
+      },
+      "id": "1dc46616-5223-4697-8818-3b50e99ae7cd",
+      "name": "Alert Owner",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        -1568,
+        1712
+      ],
+      "credentials": {
+        "telegramApi": {
+          "name": "Telegram account"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Daily 8AM Trigger": {
+      "main": [
+        [
+          {
+            "node": "Interest Profile (edit me)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Interest Profile (edit me)": {
+      "main": [
+        [
+          {
+            "node": "Fetch Jobs (JSearch)",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Fetch Posts (RSS)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Jobs (JSearch)": {
+      "main": [
+        [
+          {
+            "node": "Combine Jobs + Posts",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Combine Jobs + Posts": {
+      "main": [
+        [
+          {
+            "node": "Shape Items for Scoring",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Posts (RSS)": {
+      "main": [
+        [
+          {
+            "node": "Combine Jobs + Posts",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Format Telegram Reply": {
+      "main": [
+        [
+          {
+            "node": "Has Chat ID",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Has Chat ID": {
+      "main": [
+        [
+          {
+            "node": "Send Telegram Reply",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format Digest": {
+      "main": [
+        [
+          {
+            "node": "Is Scheduled Run",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Is Scheduled Run": {
+      "main": [
+        [
+          {
+            "node": "Send to Telegram",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Sheet Rows": {
+      "main": [
+        [
+          {
+            "node": "Log to Google Sheet",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Record Seen Jobs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Gemini Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Score Matches (AI)",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Score Matches (AI)": {
+      "main": [
+        [
+          {
+            "node": "Format Digest",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Format Telegram Reply",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Prepare Sheet Rows",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Format Web Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Telegram Bot Query": {
+      "main": [
+        [
+          {
+            "node": "Route Message Type",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Route Message Type": {
+      "main": [
+        [
+          {
+            "node": "Download CV",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Prepare Telegram Query",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Delete CV Row",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Download CV": {
+      "main": [
+        [
+          {
+            "node": "Extract CV Text",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract CV Text": {
+      "main": [
+        [
+          {
+            "node": "Save CV",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Save CV": {
+      "main": [
+        [
+          {
+            "node": "Confirm CV Saved",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Shape Items for Scoring": {
+      "main": [
+        [
+          {
+            "node": "Load CV",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Load CV": {
+      "main": [
+        [
+          {
+            "node": "Load Seen Jobs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Load Seen Jobs": {
+      "main": [
+        [
+          {
+            "node": "Filter New Jobs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Filter New Jobs": {
+      "main": [
+        [
+          {
+            "node": "Score Matches (AI)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Web Search Webhook": {
+      "main": [
+        [
+          {
+            "node": "Prepare Web Query",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format Web Response": {
+      "main": [
+        [
+          {
+            "node": "Respond to Web",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Telegram Query": {
+      "main": [
+        [
+          {
+            "node": "Load Usage Today",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Web Query": {
+      "main": [
+        [
+          {
+            "node": "Load Usage Today",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Load Usage Today": {
+      "main": [
+        [
+          {
+            "node": "Check Rate Limit",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Rate Limit": {
+      "main": [
+        [
+          {
+            "node": "Under Daily Limit",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Under Daily Limit": {
+      "main": [
+        [
+          {
+            "node": "Increment Usage",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Route Limit Notice",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Increment Usage": {
+      "main": [
+        [
+          {
+            "node": "Fetch Jobs (JSearch)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Route Limit Notice": {
+      "main": [
+        [
+          {
+            "node": "Send TG Limit Notice",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Format Web Limit",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format Web Limit": {
+      "main": [
+        [
+          {
+            "node": "Respond Web Limited",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Delete CV Row": {
+      "main": [
+        [
+          {
+            "node": "Delete Seen Jobs Rows",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Delete Seen Jobs Rows": {
+      "main": [
+        [
+          {
+            "node": "Confirm Reset",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "On Any Error": {
+      "main": [
+        [
+          {
+            "node": "Format Error Alert",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format Error Alert": {
+      "main": [
+        [
+          {
+            "node": "Alert Owner",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  }
+}
