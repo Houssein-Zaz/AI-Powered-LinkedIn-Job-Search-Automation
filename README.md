@@ -2,7 +2,7 @@
 
 Searches live job postings, scores each one against your actual CV, and tells you **what you're missing** — the thing no job board shows you.
 
-Runs three ways: a Telegram bot you message directly, a web app, and a daily digest. Protects itself with rate limiting and alerts you on failure.
+Runs three ways: a Telegram bot you message directly, a web app, and a daily digest.
 
 ```
 Senior Cloud Engineer · Acme Corp
@@ -10,31 +10,39 @@ Fit: 72/100
 Missing: Terraform, Kubernetes at scale, on-call experience
 ```
 
+## Repo structure
+
+```
+n8n/workflow.json   — the importable n8n workflow (credentials stripped to name only)
+site/index.html     — a standalone web UI
+README.md           — this file
+```
+
 ---
 
 ## What it does
 
-- Searches live postings from LinkedIn, Indeed, Glassdoor and others through a licensed aggregator
+- Searches live postings from LinkedIn, Indeed, Glassdoor and others through a licensed aggregator (JSearch)
 - Ranks every result against a free-text description of what you want
 - With a CV uploaded, adds a 0–100 fit score and a specific list of requirements your CV doesn't evidence
+- Company-specific search (e.g. "jobs at EY", "Consultant at Google")
 - Detects internship / French *alternance* (work-study apprenticeship) requests and reasons about them explicitly, since job boards routinely mis-tag them
 - Never shows you the same job twice
 - Filters by country, city, date posted, job type, and remote-only
 - Logs every match to a Google Sheet, building a dataset over time
-- Rate-limited per user (15 searches/day) so a public bot or website can't drain your API budget
 - Alerts you on Telegram if any part of the pipeline fails
-- `/reset` command clears a user's CV and history on request
+- `/reset` command clears your CV and search history
 
 ---
 
 ## Architecture
 
-Three entry points feed one shared pipeline, gated by rate limiting, then split into separate delivery formats:
+Three entry points feed one shared pipeline, then split into separate delivery formats:
 
 ```
 Schedule (8AM) ──────────────────────────────┐
-Telegram msg ──► Rate limit check ──┬─────────┤
-Web request ────► Rate limit check ─┘         │
+Telegram msg ────────────────────────────────┤
+Web request ─────────────────────────────────┘
                                                ▼
                           Fetch jobs ──► Normalise ──► Load CV ──► Filter seen ──► AI scoring
                                                                                         │
@@ -43,9 +51,11 @@ Web request ────► Rate limit check ─┘         │
                             Telegram digest         Telegram reply      Website JSON   Sheet + seen-jobs log
 ```
 
-Separately: a document sent to the bot routes to CV storage; `/reset` routes to clearing that user's data; any node failure anywhere routes to a Telegram alert.
+A document sent to the bot routes to CV storage; `/reset` routes to clearing that user's data; any node failure anywhere routes to a Telegram alert.
 
-Two data tables (`cv_store`, `seen_jobs`) hold per-user state, keyed by Telegram chat ID or browser session ID. A third (`usage_log`) tracks daily search counts for rate limiting.
+Two data tables hold per-user state: `cv_store` (your CV) and `seen_jobs` (dedupe history), keyed by Telegram chat ID or browser session ID.
+
+**No rate limiting or usage caps** — this is meant to be self-hosted, one copy per person. If you're deploying this for public/shared use, add your own limits.
 
 ---
 
@@ -70,11 +80,11 @@ The AI step is a **Basic LLM Chain with a swappable model sub-node** — deliber
 
 In n8n: **Workflows → Import from File** → `n8n/workflow.json`.
 
-Every node carries a note explaining what it does and what it needs. Start there.
+Every node carries a note explaining what it does and what it needs.
 
 ### 2. RapidAPI (job data)
 
-1. Subscribe to [JSearch](https://rapidapi.com/letscrape-6bRBa3QguO5/api/jsearch) (free tier available)
+1. Subscribe to [JSearch](https://rapidapi.com/letscrape-6bRBa3QguO5/api/jsearch) — the free tier is 200 requests/month, each search uses 3 (one per page fetched), so budget accordingly
 2. Copy your key from the Code Snippets panel
 3. In n8n, open **Fetch Jobs (JSearch)** → create a **Header Auth** credential:
    - Name: `X-RapidAPI-Key`
@@ -89,7 +99,7 @@ Every node carries a note explaining what it does and what it needs. Start there
 
 ### 4. AI model
 
-Open **Gemini Model** and connect a Google credential. For a free long-term setup, generate a key at [Google AI Studio](https://aistudio.google.com/apikey) — the free tier comfortably covers personal use.
+Open **Gemini Model** and connect a Google credential. Generate a free key at [Google AI Studio](https://aistudio.google.com/apikey) — the free tier comfortably covers personal use.
 
 Any other provider works: replace the sub-node, leave the rest alone.
 
@@ -104,21 +114,20 @@ Any other provider works: replace the sub-node, leave the rest alone.
 
 ### 6. Data tables
 
-Create three data tables in your n8n project:
+Create two data tables in your n8n project:
 
 | Table | Columns |
 |---|---|
 | `cv_store` | `chat_id`, `cv_text`, `updated_at` (all string) |
 | `seen_jobs` | `chat_id`, `job_link`, `seen_at` (all string) |
-| `usage_log` | `identity`, `usage_date`, `count` (all string) |
 
-Point **Load CV** / **Save CV** / **Delete CV Row** at `cv_store`; **Load Seen Jobs** / **Record Seen Jobs** / **Delete Seen Jobs Rows** at `seen_jobs`; **Load Usage Today** / **Increment Usage** at `usage_log`.
+Point **Load CV** / **Save CV** / **Delete CV Row** at `cv_store`; **Load Seen Jobs** / **Record Seen Jobs** / **Delete Seen Jobs Rows** at `seen_jobs`.
 
 > **Leave "Always Output Data" enabled** on *Load CV* and *Load Seen Jobs*. A first-time user has neither a CV nor history, those nodes return zero rows, and in n8n a node with no output halts the branch — the search dies silently with no error.
 
 ### 7. Error alerting
 
-Set this workflow as its **own Error Workflow**: `⋯` menu → Settings → Error Workflow → select this same workflow. This can't be done via the API — it's a one-time manual step. Once set, any node failure anywhere sends you a Telegram alert with the node name, error, and timestamp.
+Set this workflow as its **own Error Workflow**: `⋯` menu → Settings → Error Workflow → select this same workflow. This can't be done via the API — it's a one-time manual step.
 
 ### 8. The website (optional)
 
@@ -141,49 +150,35 @@ cloud engineer in France
 marketing
 cabin crew in UAE
 data analyst internship in France
-alternance développeur France
+Consultant at EY
+jobs at Google in Germany
 ```
 
-It splits on the last ` in ` to separate role from location, and detects internship/alternance/stage keywords automatically. Send a **PDF** (as a file, not a photo) to store your CV. Send `/reset` to clear your CV and search history.
+Supports role, location (` in `), and company (` at `) in any combination. Send a **PDF** to store your CV. Send `/reset` to clear your CV and search history.
 
-**Website:** pick a field or type a role, choose country, optionally add city, date window, job type, remote-only, internship/alternance toggle, and a CV.
+**Website:** pick a field or type a role, choose country, optionally add city, company, date window, job type, remote-only, internship/alternance toggle, and a CV.
 
 **Daily digest:** edit the **Interest Profile** node once; it runs itself.
 
-**Limits:** each user (Telegram chat or browser) gets 15 searches/day. Hitting the cap returns a clear message rather than failing silently.
-
 ---
 
-## Gotchas worth knowing
+## Gotchas worth knowing (found the hard way)
 
-Each of these cost real debugging time:
-
-- **Empty lookups halt everything.** See the Always Output Data note above. The execution reports *success* while doing nothing.
+- **Empty lookups halt everything.** A node with `alwaysOutputData` off that returns zero rows silently kills the entire branch downstream — the execution reports *success* while doing nothing. Applies to any Data Table "get" with no matching rows.
+- **A write node dropped my search fields.** Chaining a node through a database write operation lost the input data — write nodes typically don't pass through their input, only their own result. Keep write operations as side branches, not in the main data path.
+- **A Switch node's output indices shift when you add a rule.** Adding a new rule to a Switch inserts a new output and pushes the fallback output's index down — any existing connection to the old fallback index needs to move too, or it silently points at a dead end.
 - **Telegram caps messages at 4096 characters.** Long result lists get rejected outright. Formatters split at 3800.
 - **The country parameter is separate from the query text.** Searching "jobs in France" while the country parameter says `us` returns US jobs. It defaults to `us`, so unmapped locations fail quietly.
 - **Alternance/apprenticeship postings are frequently mis-tagged** as full-time by job boards, so filtering by employment type alone misses them — the fix lives in the AI prompt, not the API filter.
-- **Draft is not published.** Editing a node changes the draft. The live webhook and bot keep running the last published version until you publish again.
-- **The n8n editor locks the workflow.** API edits fail while the canvas is open in a browser tab — and edits made while it's open can be silently lost.
+- **Draft is not published.** Editing a node changes the draft. The live webhook and bot keep running the last published version until you publish again — and having the editor open while making API changes can cause edits to silently revert.
 - **Scanned PDFs yield no text.** CV extraction needs a text-based PDF.
-- **Every trigger runs the shared pipeline**, so without gate nodes each trigger fires *all* delivery branches — the daily digest was arriving every time someone used the bot, until a filter gated it to the actual schedule.
-- **A hardcoded node reference breaks on other paths.** An expression pointing directly at one trigger's node name throws "node hasn't been executed" when a different trigger runs the same shared step. Use `isExecuted` checks or try/catch fallbacks instead.
 
 ---
 
 ## Limitations
 
-- **Single-tenant by design.** All credentials are one person's. Sharing the bot works technically — chat IDs and rate limits are handled per-user — but every message still spends *your* API quota, just capped at 15/day/user now.
-- **The webhook is unauthenticated.** Anyone with the URL can trigger searches, subject to the same rate limit.
+- **Personal tool by design.** No auth, no per-user isolation beyond chat ID/session ID, no shared rate limiting. Fine for self-hosted personal use; add your own protections before exposing it publicly.
 - **Fit scores are a language model's judgment**, not an ATS. Useful as direction, not as a verdict.
 - **Coverage varies by market.** Strong in the US, UK and France; thinner in smaller markets. Narrow filters (remote + full-time + past week) can empty a result set fast.
 - **Emails are rarely present.** Most postings link to an apply page rather than an address. The field is populated only when a real address appears in the description — never invented.
-
----
-
-## Repo layout
-
-```
-n8n/workflow.json   the workflow, credentials stripped
-site/index.html     standalone web app
-README.md           this file
-```
+- **Company search isn't a hard filter.** It biases the search query and instructs the AI to exclude non-matches, but depends on JSearch's underlying data actually having current postings for that company.

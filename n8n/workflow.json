@@ -170,7 +170,7 @@
     },
     {
       "parameters": {
-        "jsCode": "function getProfile() {\n  try { return $('Interest Profile (edit me)').first().json; } catch (e) {}\n  return {};\n}\nconst profile = getProfile();\nconst kw = encodeURIComponent(profile.job_search_query || '');\nconst loc = encodeURIComponent(profile.job_location || '');\nconst linkedInUrl = 'https://www.linkedin.com/jobs/search/?keywords=' + kw + '&location=' + loc;\n\nconst output = $input.first().json;\nlet items = [];\n\nif (Array.isArray(output.items)) {\n  items = output.items.map(function(it) {\n    return {\n      type: it.type,\n      title: it.title,\n      company_or_source: it.company || 'LinkedIn',\n      link: it.link,\n      reason: 'Keyword match (AI ranking currently off)'\n    };\n  });\n} else {\n  let raw = '';\n  if (typeof output.content === 'string') { raw = output.content; }\n  else if (Array.isArray(output.content)) {\n    const textBlock = output.content.find(function(c) { return c.type === 'text'; });\n    raw = textBlock ? textBlock.text : '';\n  } else if (output.text) { raw = output.text; }\n  else if (output.response) { raw = output.response; }\n  else if (output.output) { raw = output.output; }\n  const cleaned = raw.replace(/```json|```/g, '').trim();\n  try { items = JSON.parse(cleaned); } catch (e) { items = []; }\n  if (!Array.isArray(items)) { items = []; }\n}\n\nconst header = 'Your Daily Match Digest\\n\\nView live results on LinkedIn: ' + linkedInUrl + '\\n\\n';\nif (!items.length) {\n  return [{ json: { message: header + 'No strong matches today.' } }];\n}\n\nconst MAX_LEN = 3800;\nconst chunks = [];\nlet current = header;\nfor (let i = 0; i < items.length; i++) {\n  const it = items[i];\n  const label = it.type === 'job' ? 'JOB' : 'POST';\n  const entry = (i + 1) + '. [' + label + '] ' + it.title + '\\n' + (it.company_or_source || '') + '\\n' + it.reason + '\\n' + it.link + '\\n\\n';\n  if ((current + entry).length > MAX_LEN) {\n    chunks.push(current);\n    current = entry;\n  } else {\n    current += entry;\n  }\n}\nif (current) chunks.push(current);\n\nreturn chunks.map(function(c) { return { json: { message: c } }; });"
+        "jsCode": "function getProfile() {\n  try { return $('Interest Profile (edit me)').first().json; } catch (e) {}\n  try { return $('Prepare Telegram Query').first().json; } catch (e) {}\n  return {};\n}\nconst profile = getProfile();\nconst kw = encodeURIComponent(profile.job_search_query || '');\nconst loc = encodeURIComponent(profile.job_location || '');\nconst linkedInUrl = 'https://www.linkedin.com/jobs/search/?keywords=' + kw + '&location=' + loc;\n\nconst output = $input.first().json;\nlet raw = '';\nif (typeof output.content === 'string') { raw = output.content; }\nelse if (Array.isArray(output.content)) {\n  const textBlock = output.content.find(function(c) { return c.type === 'text'; });\n  raw = textBlock ? textBlock.text : '';\n} else if (output.text) { raw = output.text; }\nelse if (output.response) { raw = output.response; }\nelse if (output.output) { raw = output.output; }\nconst cleaned = raw.replace(/```json|```/g, '').trim();\nlet items = [];\ntry { items = JSON.parse(cleaned); } catch (e) { items = []; }\nif (!Array.isArray(items)) { items = []; }\n\nconst header = 'Your Daily Match Digest\\n\\nView live results on LinkedIn: ' + linkedInUrl + '\\n\\n';\nif (!items.length) {\n  return [{ json: { message: header + 'No strong matches today.' } }];\n}\n\nconst MAX_LEN = 3800;\nconst chunks = [];\nlet current = header;\nfor (let i = 0; i < items.length; i++) {\n  const it = items[i];\n  const label = it.type === 'job' ? 'JOB' : 'POST';\n  const entry = (i + 1) + '. [' + label + '] ' + it.title + '\\n' + (it.company_or_source || '') + '\\n' + it.reason + '\\n' + it.link + '\\n\\n';\n  if ((current + entry).length > MAX_LEN) {\n    chunks.push(current);\n    current = entry;\n  } else {\n    current += entry;\n  }\n}\nif (current) chunks.push(current);\n\nreturn chunks.map(function(c) { return { json: { message: c } }; });"
       },
       "id": "b4b56377-199c-423c-9003-882bb5eb5279",
       "name": "Format Digest",
@@ -227,7 +227,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const msg = $json.message || {};\nconst text = (msg.text || '').trim();\nconst chatId = msg.chat ? msg.chat.id : null;\n\nconst countryMap = {\n  'usa': 'us', 'united states': 'us', 'us': 'us', 'america': 'us',\n  'france': 'fr', 'tunisia': 'tn', 'canada': 'ca', 'uk': 'gb', 'united kingdom': 'gb',\n  'england': 'gb', 'germany': 'de', 'spain': 'es', 'italy': 'it', 'morocco': 'ma',\n  'algeria': 'dz', 'egypt': 'eg', 'india': 'in', 'netherlands': 'nl', 'belgium': 'be',\n  'switzerland': 'ch', 'uae': 'ae', 'dubai': 'ae', 'saudi arabia': 'sa', 'australia': 'au',\n  'ireland': 'ie', 'portugal': 'pt', 'qatar': 'qa', 'remote': 'us'\n};\n\nlet query = text;\nlet location = 'Remote';\nconst match = text.match(/^(.*)\\s+in\\s+([A-Za-z\\s]+)$/i);\nif (match) {\n  query = match[1].trim();\n  location = match[2].trim();\n}\n\nconst countryCode = countryMap[location.toLowerCase()] || 'us';\n\nconst internshipWords = /\\b(alternance|apprenticeship|apprentice|internship|intern|stage)\\b/i;\nconst wantsInternship = internshipWords.test(text);\n\nlet interestProfile = text || 'General interest';\nif (wantsInternship) {\n  interestProfile += '. IMPORTANT: the candidate is specifically looking for an internship or alternance/apprenticeship contract (a French work-study program combining study and paid work at a company), not a standard full-time role. Prioritize postings that mention internship, apprenticeship, alternance, stage, work-study, or co-op, even if the listing is formally tagged as full-time or part-time - alternance roles are frequently mis-tagged by job boards. Exclude senior or experienced-only roles.';\n}\n\nreturn [{ json: {\n  interest_profile: interestProfile,\n  job_search_query: query || 'jobs',\n  job_location: location,\n  job_country_code: countryCode,\n  country_name: location,\n  wants_internship: wantsInternship,\n  telegram_chat_id: chatId\n} }];"
+        "jsCode": "const msg = $json.message || {};\nconst text = (msg.text || '').trim();\nconst chatId = msg.chat ? msg.chat.id : null;\n\nconst countryMap = {\n  'usa': 'us', 'united states': 'us', 'us': 'us', 'america': 'us',\n  'france': 'fr', 'tunisia': 'tn', 'canada': 'ca', 'uk': 'gb', 'united kingdom': 'gb',\n  'england': 'gb', 'germany': 'de', 'spain': 'es', 'italy': 'it', 'morocco': 'ma',\n  'algeria': 'dz', 'egypt': 'eg', 'india': 'in', 'netherlands': 'nl', 'belgium': 'be',\n  'switzerland': 'ch', 'uae': 'ae', 'dubai': 'ae', 'saudi arabia': 'sa', 'australia': 'au',\n  'ireland': 'ie', 'portugal': 'pt', 'qatar': 'qa', 'remote': 'us'\n};\n\nlet remaining = text;\nlet location = 'Remote';\nconst locMatch = remaining.match(/^(.*)\\s+in\\s+([A-Za-z\\s]+)$/i);\nif (locMatch) {\n  remaining = locMatch[1].trim();\n  location = locMatch[2].trim();\n}\n\nlet role = remaining;\nlet company = '';\nconst companyMatch = remaining.match(/^(.*)\\s+at\\s+([A-Za-z0-9&.\\-\\s]+)$/i);\nif (companyMatch) {\n  role = companyMatch[1].trim();\n  company = companyMatch[2].trim();\n}\n\nlet query;\nif (company) {\n  query = role ? (role + ' at ' + company) : (company + ' jobs');\n} else {\n  query = role || 'jobs';\n}\n\nconst countryCode = countryMap[location.toLowerCase()] || 'us';\n\nconst internshipWords = /\\b(alternance|apprenticeship|apprentice|internship|intern|stage)\\b/i;\nconst wantsInternship = internshipWords.test(text);\n\nlet interestProfile = text || 'General interest';\nif (company) {\n  interestProfile += '. The candidate specifically wants roles at ' + company + ' - ONLY include jobs where the employer is actually ' + company + '. Exclude any result from a different company.';\n}\nif (wantsInternship) {\n  interestProfile += '. IMPORTANT: the candidate is specifically looking for an internship or alternance/apprenticeship contract (a French work-study program combining study and paid work at a company), not a standard full-time role. Prioritize postings that mention internship, apprenticeship, alternance, stage, work-study, or co-op, even if the listing is formally tagged as full-time or part-time - alternance roles are frequently mis-tagged by job boards. Exclude senior or experienced-only roles.';\n}\n\nreturn [{ json: {\n  interest_profile: interestProfile,\n  job_search_query: query,\n  job_location: location,\n  job_country_code: countryCode,\n  country_name: location,\n  company: company,\n  wants_internship: wantsInternship,\n  telegram_chat_id: chatId\n} }];"
       },
       "id": "435adeae-be6c-4c32-bde2-dd427497d091",
       "name": "Prepare Telegram Query",
@@ -491,7 +491,7 @@
       "type": "@n8n/n8n-nodes-langchain.chainLlm",
       "typeVersion": 1.9,
       "position": [
-        640,
+        576,
         352
       ]
     },
@@ -830,7 +830,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const body = $json.body || {};\nconst category = (body.category || '').trim();\nconst prompt = (body.prompt || '').trim();\nconst interests = (body.interests || '').trim();\nconst city = (body.city || '').trim();\nconst countryCode = ((body.country_code || 'us').trim() || 'us').toLowerCase();\nconst countryName = (body.country_name || '').trim();\nconst cvText = (body.cv_text || '').trim();\nconst sessionId = (body.session_id || 'web-anon').trim();\nconst wantsInternship = body.internship === true;\n\nconst allowedDates = ['all', 'today', '3days', 'week', 'month'];\nlet datePosted = (body.date_posted || 'month').trim();\nif (allowedDates.indexOf(datePosted) === -1) { datePosted = 'month'; }\n\nconst remoteOnly = body.remote_only === true;\nlet employmentTypes = (body.employment_types || '').trim() || 'FULLTIME,CONTRACTOR,PARTTIME,INTERN';\nif (wantsInternship) {\n  employmentTypes = 'FULLTIME,PARTTIME,INTERN,CONTRACTOR';\n}\n\nconst location = remoteOnly ? 'Remote' : (city || countryName || 'Remote');\nconst searchQuery = [category, prompt].filter(Boolean).join(' ') || interests || 'jobs';\n\nlet interestProfile = [prompt, interests].filter(Boolean).join('. Also interested in: ') || category || 'General interest';\nif (wantsInternship) {\n  interestProfile += '. IMPORTANT: the candidate is specifically looking for an internship or alternance/apprenticeship contract (a French work-study program combining study and paid work at a company), not a standard full-time role. Prioritize postings that mention internship, apprenticeship, alternance, stage, work-study, or co-op, even if the listing is formally tagged as full-time or part-time - alternance roles are frequently mis-tagged by job boards. Exclude senior or experienced-only roles.';\n}\n\nreturn [{ json: {\n  interest_profile: interestProfile,\n  job_search_query: searchQuery,\n  job_location: location,\n  job_country_code: countryCode,\n  country_name: countryName || countryCode.toUpperCase(),\n  date_posted: datePosted,\n  remote_only: remoteOnly,\n  employment_types: employmentTypes,\n  wants_internship: wantsInternship,\n  cv_text: cvText.slice(0, 12000),\n  session_id: sessionId\n} }];"
+        "jsCode": "const body = $json.body || {};\nconst category = (body.category || '').trim();\nconst prompt = (body.prompt || '').trim();\nconst company = (body.company || '').trim();\nconst interests = (body.interests || '').trim();\nconst city = (body.city || '').trim();\nconst countryCode = ((body.country_code || 'us').trim() || 'us').toLowerCase();\nconst countryName = (body.country_name || '').trim();\nconst cvText = (body.cv_text || '').trim();\nconst sessionId = (body.session_id || 'web-anon').trim();\nconst wantsInternship = body.internship === true;\n\nconst allowedDates = ['all', 'today', '3days', 'week', 'month'];\nlet datePosted = (body.date_posted || 'month').trim();\nif (allowedDates.indexOf(datePosted) === -1) { datePosted = 'month'; }\n\nconst remoteOnly = body.remote_only === true;\nlet employmentTypes = (body.employment_types || '').trim() || 'FULLTIME,CONTRACTOR,PARTTIME,INTERN';\nif (wantsInternship) {\n  employmentTypes = 'FULLTIME,PARTTIME,INTERN,CONTRACTOR';\n}\n\nconst role = [category, prompt].filter(Boolean).join(' ');\nlet searchQuery;\nif (company) {\n  searchQuery = role ? (role + ' at ' + company) : (company + ' jobs');\n} else {\n  searchQuery = role || interests || 'jobs';\n}\n\nconst location = remoteOnly ? 'Remote' : (city || countryName || 'Remote');\n\nlet interestProfile = [prompt, interests].filter(Boolean).join('. Also interested in: ') || category || 'General interest';\nif (company) {\n  interestProfile += '. The candidate specifically wants roles at ' + company + ' - ONLY include jobs where the employer is actually ' + company + '. Exclude any result from a different company.';\n}\nif (wantsInternship) {\n  interestProfile += '. IMPORTANT: the candidate is specifically looking for an internship or alternance/apprenticeship contract (a French work-study program combining study and paid work at a company), not a standard full-time role. Prioritize postings that mention internship, apprenticeship, alternance, stage, work-study, or co-op, even if the listing is formally tagged as full-time or part-time - alternance roles are frequently mis-tagged by job boards. Exclude senior or experienced-only roles.';\n}\n\nreturn [{ json: {\n  interest_profile: interestProfile,\n  job_search_query: searchQuery,\n  job_location: location,\n  job_country_code: countryCode,\n  country_name: countryName || countryCode.toUpperCase(),\n  date_posted: datePosted,\n  remote_only: remoteOnly,\n  employment_types: employmentTypes,\n  wants_internship: wantsInternship,\n  company: company,\n  cv_text: cvText.slice(0, 12000),\n  session_id: sessionId\n} }];"
       },
       "id": "fe8cae7a-de52-4cc4-b7fa-4f1460e6a99c",
       "name": "Prepare Web Query",
@@ -865,240 +865,6 @@
       "position": [
         1088,
         624
-      ]
-    },
-    {
-      "parameters": {
-        "operation": "get",
-        "dataTableId": {
-          "__rl": true,
-          "mode": "name",
-          "value": "usage_log"
-        },
-        "matchType": "allConditions",
-        "filters": {
-          "conditions": [
-            {
-              "keyName": "identity",
-              "keyValue": "={{ $('Prepare Telegram Query').isExecuted ? $('Prepare Telegram Query').first().json.telegram_chat_id : $('Prepare Web Query').first().json.session_id }}"
-            },
-            {
-              "keyName": "usage_date",
-              "keyValue": "={{ $now.toFormat('yyyy-MM-dd') }}"
-            }
-          ]
-        }
-      },
-      "id": "379ff998-5cc7-4dad-87f8-af6262e7543a",
-      "name": "Load Usage Today",
-      "type": "n8n-nodes-base.dataTable",
-      "typeVersion": 1.1,
-      "position": [
-        -1344,
-        944
-      ]
-    },
-    {
-      "parameters": {
-        "jsCode": "const DAILY_LIMIT = 15;\n\nlet source = {};\ntry {\n  if ($('Prepare Telegram Query').isExecuted) { source = $('Prepare Telegram Query').first().json; }\n  else if ($('Prepare Web Query').isExecuted) { source = $('Prepare Web Query').first().json; }\n} catch (e) {}\n\nlet identity = '';\ntry {\n  identity = $('Prepare Telegram Query').isExecuted\n    ? String($('Prepare Telegram Query').first().json.telegram_chat_id)\n    : String($('Prepare Web Query').first().json.session_id);\n} catch (e) {}\n\nconst today = new Date().toISOString().slice(0, 10);\n\nlet currentCount = 0;\ntry {\n  const row = $input.first().json;\n  if (row && row.count !== undefined) { currentCount = parseInt(row.count, 10) || 0; }\n} catch (e) {}\n\nconst allowed = currentCount < DAILY_LIMIT;\n\nreturn [{ json: Object.assign({}, source, {\n  identity: identity,\n  usage_date: today,\n  current_count: currentCount,\n  new_count: currentCount + 1,\n  allowed: allowed,\n  daily_limit: DAILY_LIMIT\n}) }];"
-      },
-      "id": "b42cb590-d91f-4104-9bff-f37f2b848fbb",
-      "name": "Check Rate Limit",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [
-        -1120,
-        944
-      ]
-    },
-    {
-      "parameters": {
-        "conditions": {
-          "combinator": "and",
-          "conditions": [
-            {
-              "leftValue": "={{ $json.allowed }}",
-              "operator": {
-                "operation": "equals",
-                "type": "boolean"
-              },
-              "rightValue": true
-            }
-          ],
-          "options": {
-            "caseSensitive": true,
-            "leftValue": "",
-            "typeValidation": "loose",
-            "version": 2
-          }
-        },
-        "options": {}
-      },
-      "id": "ab2c7463-7400-4a84-99a5-760bea69b7ad",
-      "name": "Under Daily Limit",
-      "type": "n8n-nodes-base.if",
-      "typeVersion": 2.3,
-      "position": [
-        -896,
-        944
-      ]
-    },
-    {
-      "parameters": {
-        "operation": "upsert",
-        "dataTableId": {
-          "__rl": true,
-          "mode": "name",
-          "value": "usage_log"
-        },
-        "matchType": "allConditions",
-        "filters": {
-          "conditions": [
-            {
-              "keyName": "identity",
-              "keyValue": "={{ $json.identity }}"
-            },
-            {
-              "keyName": "usage_date",
-              "keyValue": "={{ $json.usage_date }}"
-            }
-          ]
-        },
-        "columns": {
-          "mappingMode": "defineBelow",
-          "schema": [
-            {
-              "canBeUsedToMatch": true,
-              "display": true,
-              "displayName": "identity",
-              "id": "identity",
-              "required": false,
-              "type": "string"
-            },
-            {
-              "canBeUsedToMatch": true,
-              "display": true,
-              "displayName": "usage_date",
-              "id": "usage_date",
-              "required": false,
-              "type": "string"
-            },
-            {
-              "canBeUsedToMatch": true,
-              "display": true,
-              "displayName": "count",
-              "id": "count",
-              "required": false,
-              "type": "string"
-            }
-          ],
-          "value": {
-            "count": "={{ $json.new_count }}",
-            "identity": "={{ $json.identity }}",
-            "usage_date": "={{ $json.usage_date }}"
-          }
-        },
-        "options": {}
-      },
-      "id": "6dce0b24-6c7b-4945-b274-0fee40ca8a60",
-      "name": "Increment Usage",
-      "type": "n8n-nodes-base.dataTable",
-      "typeVersion": 1.1,
-      "position": [
-        -688,
-        864
-      ]
-    },
-    {
-      "parameters": {
-        "rules": {
-          "values": [
-            {
-              "conditions": {
-                "combinator": "and",
-                "conditions": [
-                  {
-                    "leftValue": "={{ $json.telegram_chat_id ? 'yes' : 'no' }}",
-                    "operator": {
-                      "operation": "equals",
-                      "type": "string"
-                    },
-                    "rightValue": "yes"
-                  }
-                ],
-                "options": {
-                  "caseSensitive": false,
-                  "leftValue": "",
-                  "typeValidation": "loose",
-                  "version": 1
-                }
-              },
-              "renameOutput": true,
-              "outputKey": "Telegram"
-            }
-          ]
-        },
-        "looseTypeValidation": true,
-        "options": {
-          "fallbackOutput": "extra",
-          "renameFallbackOutput": "Web"
-        }
-      },
-      "id": "bd064674-2a30-40cc-8d50-48d02c7af6fd",
-      "name": "Route Limit Notice",
-      "type": "n8n-nodes-base.switch",
-      "typeVersion": 3.4,
-      "position": [
-        -688,
-        1024
-      ]
-    },
-    {
-      "parameters": {
-        "chatId": "={{ $json.telegram_chat_id }}",
-        "text": "=You've reached today's search limit ({{ $json.daily_limit }} searches/day). This keeps the bot running for everyone - try again tomorrow.",
-        "additionalFields": {
-          "appendAttribution": false
-        }
-      },
-      "id": "b3438bf3-9e75-4d2d-a420-1dd931c3a632",
-      "name": "Send TG Limit Notice",
-      "type": "n8n-nodes-base.telegram",
-      "typeVersion": 1.2,
-      "position": [
-        -464,
-        896
-      ],
-      "credentials": {
-        "telegramApi": {
-          "name": "Telegram account"
-        }
-      }
-    },
-    {
-      "parameters": {
-        "jsCode": "return [{ json: {\n  items: [],\n  skipped_seen: 0,\n  has_cv: false,\n  rate_limited: true,\n  message: \"Daily search limit reached (\" + ($json.daily_limit || 15) + \" searches/day) for this browser. Try again tomorrow.\"\n} }];"
-      },
-      "id": "fe89fcf5-b732-4d5b-82ec-70a0823db222",
-      "name": "Format Web Limit",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [
-        -464,
-        1072
-      ]
-    },
-    {
-      "parameters": {
-        "options": {}
-      },
-      "id": "63c95932-ed1e-43fb-ae79-e7290913ed6c",
-      "name": "Respond Web Limited",
-      "type": "n8n-nodes-base.respondToWebhook",
-      "typeVersion": 1.5,
-      "position": [
-        -240,
-        1072
       ]
     },
     {
@@ -1404,12 +1170,14 @@
         ],
         [
           {
-            "node": "Prepare Telegram Query",
+            "node": "Delete CV Row",
             "type": "main",
             "index": 0
-          },
+          }
+        ],
+        [
           {
-            "node": "Delete CV Row",
+            "node": "Prepare Telegram Query",
             "type": "main",
             "index": 0
           }
@@ -1515,108 +1283,6 @@
         ]
       ]
     },
-    "Prepare Telegram Query": {
-      "main": [
-        [
-          {
-            "node": "Load Usage Today",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Prepare Web Query": {
-      "main": [
-        [
-          {
-            "node": "Load Usage Today",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Load Usage Today": {
-      "main": [
-        [
-          {
-            "node": "Check Rate Limit",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Check Rate Limit": {
-      "main": [
-        [
-          {
-            "node": "Under Daily Limit",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Under Daily Limit": {
-      "main": [
-        [
-          {
-            "node": "Increment Usage",
-            "type": "main",
-            "index": 0
-          }
-        ],
-        [
-          {
-            "node": "Route Limit Notice",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Increment Usage": {
-      "main": [
-        [
-          {
-            "node": "Fetch Jobs (JSearch)",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Route Limit Notice": {
-      "main": [
-        [
-          {
-            "node": "Send TG Limit Notice",
-            "type": "main",
-            "index": 0
-          }
-        ],
-        [
-          {
-            "node": "Format Web Limit",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Format Web Limit": {
-      "main": [
-        [
-          {
-            "node": "Respond Web Limited",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
     "Delete CV Row": {
       "main": [
         [
@@ -1655,6 +1321,28 @@
         [
           {
             "node": "Alert Owner",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Telegram Query": {
+      "main": [
+        [
+          {
+            "node": "Fetch Jobs (JSearch)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Web Query": {
+      "main": [
+        [
+          {
+            "node": "Fetch Jobs (JSearch)",
             "type": "main",
             "index": 0
           }
