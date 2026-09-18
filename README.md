@@ -181,11 +181,3 @@ Supports role, location (` in `), and company (` at `) in any combination. Send 
 - **Scanned PDFs yield no text.** CV extraction needs a text-based PDF.
 
 ---
-
-## Limitations
-
-- **Personal tool by design.** No auth, no per-user isolation beyond chat ID/session ID, no shared rate limiting. Fine for self-hosted personal use; add your own protections before exposing it publicly.
-- **Fit scores are a language model's judgment**, not an ATS. Useful as direction, not as a verdict.
-- **Coverage varies by market.** Strong in the US, UK and France; thinner in smaller markets. Narrow filters (remote + full-time + past week) can empty a result set fast.
-- **Emails are rarely present.** Most postings link to an apply page rather than an address. The field is populated only when a real address appears in the description — never invented.
-- **Company search isn't a hard filter.** It biases the search query and instructs the AI to exclude non-matches, but depends on JSearch's underlying data actually having current postings for that company.
